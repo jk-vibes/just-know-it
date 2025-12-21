@@ -1,5 +1,7 @@
 {
-  "name": "Just Know It",
-  "description": "A 50/30/20 rule-based personal finance app that helps you track needs, wants, and savings with rule-based automation and clear progress visuals.",
-  "requestFramePermissions": []
+  "name": "Just Know It - Premium",
+  "description": "High-fidelity AI personal finance tracker inspired by Just Kick design aesthetics.",
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

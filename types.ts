@@ -1,6 +1,8 @@
 
 export type Category = 'Needs' | 'Wants' | 'Savings' | 'Uncategorized';
 
+export type Frequency = 'None' | 'Weekly' | 'Monthly' | 'Yearly';
+
 export interface Expense {
   id: string;
   amount: number;
@@ -17,6 +19,16 @@ export interface BudgetRule {
   category: Category;
 }
 
+export interface RecurringItem {
+  id: string;
+  amount: number;
+  category: Category;
+  note: string;
+  merchant?: string;
+  frequency: Frequency;
+  nextDueDate: string;
+}
+
 export interface UserSettings {
   monthlyIncome: number;
   split: {
@@ -25,6 +37,16 @@ export interface UserSettings {
     Savings: number;
   };
   isOnboarded: boolean;
+  theme: 'light' | 'dark' | 'system';
+  isCloudSyncEnabled: boolean;
+  currency: string;
 }
 
-export type View = 'Dashboard' | 'Expenses' | 'Rules' | 'Profile' | 'Add';
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+}
+
+export type View = 'Dashboard' | 'Expenses' | 'Rules' | 'Profile' | 'Add' | 'Auth';

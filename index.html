@@ -1,42 +1,98 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Just Know It - Budget Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
+  <title>Just Know It - Premium Budget Tracker</title>
+  <link rel="manifest" href="/manifest.json">
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          animation: {
+            'kick': 'fadeIn 0.3s ease-out forwards',
+            'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg-light: #ffffff;
+      --bg-dark: #0f172a;
+      /* Define safe area variables for use in CSS if needed */
+      --sat: env(safe-area-inset-top);
+      --sab: env(safe-area-inset-bottom);
+      --sal: env(safe-area-inset-left);
+      --sar: env(safe-area-inset-right);
+    }
+    
     body {
-      font-family: 'Inter', sans-serif;
-      -webkit-tap-highlight-color: transparent;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-light);
+      transition: background-color 0.3s ease;
+      
+      /* NATIVE APP FEEL CSS */
+      -webkit-tap-highlight-color: transparent; /* Remove blue highlight on tap */
+      -webkit-touch-callout: none; /* Disable link long-press menu */
+      -webkit-user-select: none; /* Disable text selection */
+      user-select: none;
+      overscroll-behavior-y: none; /* Disable pull-to-refresh/bounce effect */
+      touch-action: pan-x pan-y; /* Improve scrolling performance */
     }
-    .safe-bottom {
-      padding-bottom: env(safe-area-inset-bottom);
+
+    /* Allow text selection only on inputs */
+    input, textarea {
+      -webkit-user-select: text;
+      user-select: text;
     }
+
+    html.dark body {
+      background-color: var(--bg-dark);
+    }
+
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
     @keyframes slideUp {
-      from { transform: translateY(100%); }
-      to { transform: translateY(0); }
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
-    .animate-slide-up {
-      animation: slideUp 0.3s ease-out forwards;
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.98); }
+      to { opacity: 1; transform: scale(1); }
     }
   </style>
-<script type="importmap">
+  <script type="importmap">
 {
   "imports": {
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "recharts": "https://esm.sh/recharts@^3.6.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+    "react": "https://esm.sh/react@19.0.0",
+    "react-dom": "https://esm.sh/react-dom@19.0.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0/client",
+    "lucide-react": "https://esm.sh/lucide-react@0.474.0?external=react",
+    "@google/genai": "https://esm.sh/@google/genai@1.3.0",
+    "recharts": "https://esm.sh/recharts@2.15.0?external=react,react-dom",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
   }
 }
 </script>
 </head>
-<body class="bg-gray-50 text-gray-900">
-  <div id="root"></div>
+<body class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white h-full w-full fixed inset-0 overflow-hidden">
+  <div id="root" class="h-full w-full"></div>
 </body>
 </html>

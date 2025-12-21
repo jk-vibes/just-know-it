@@ -1,30 +1,32 @@
 
 import React, { useState } from 'react';
-import { Expense, Category } from '../types';
-import { CATEGORY_COLORS } from '../constants';
+import { Expense, Category, UserSettings } from '../types';
+import { CATEGORY_COLORS, getCurrencySymbol } from '../constants';
 import { Check, ArrowRight, Smartphone, Building2 } from 'lucide-react';
 
 interface CategorizationModalProps {
+  settings: UserSettings;
   expenses: Expense[];
   onConfirm: (id: string, category: Category) => void;
   onClose: () => void;
 }
 
-const CategorizationModal: React.FC<CategorizationModalProps> = ({ expenses, onConfirm, onClose }) => {
+const CategorizationModal: React.FC<CategorizationModalProps> = ({ settings, expenses, onConfirm, onClose }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const current = expenses[currentIndex];
+  const currencySymbol = getCurrencySymbol(settings.currency);
 
   if (!current) {
     return (
-      <div className="fixed inset-0 bg-white z-[70] flex flex-col items-center justify-center p-8 text-center animate-slide-up">
-        <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
-          <Check size={48} strokeWidth={3} />
+      <div className="fixed inset-0 bg-white dark:bg-slate-900 z-[70] flex flex-col items-center justify-center p-6 text-center animate-slide-up">
+        <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 text-green-600 rounded-[32px] flex items-center justify-center mb-6">
+          <Check size={40} strokeWidth={3} />
         </div>
-        <h2 className="text-3xl font-extrabold mb-2 text-gray-900">All Done!</h2>
-        <p className="text-gray-500 mb-8 max-w-xs">You've successfully categorized all pending transactions.</p>
+        <h2 className="text-2xl font-extrabold mb-2 text-slate-900 dark:text-white">All Done!</h2>
+        <p className="text-slate-500 text-sm mb-8 max-w-[240px]">You've successfully categorized all pending transactions.</p>
         <button 
           onClick={onClose}
-          className="w-full max-w-xs bg-blue-600 text-white font-extrabold py-5 rounded-3xl shadow-xl shadow-blue-100"
+          className="w-full max-w-xs bg-indigo-600 text-white font-extrabold py-4 rounded-[24px] shadow-xl shadow-indigo-100 dark:shadow-none"
         >
           Back to Dashboard
         </button>
@@ -33,29 +35,29 @@ const CategorizationModal: React.FC<CategorizationModalProps> = ({ expenses, onC
   }
 
   return (
-    <div className="fixed inset-0 bg-white z-[70] flex flex-col animate-slide-up overflow-hidden">
-      <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+    <div className="fixed inset-0 bg-white dark:bg-slate-900 z-[70] flex flex-col animate-slide-up overflow-hidden">
+      <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="bg-blue-600 text-white p-2 rounded-lg">
-            <Smartphone size={18} />
+          <div className="bg-indigo-600 text-white p-1.5 rounded-lg">
+            <Smartphone size={16} />
           </div>
-          <span className="font-extrabold text-blue-900 uppercase text-xs tracking-widest">New Alerts</span>
+          <span className="font-extrabold text-indigo-900 dark:text-indigo-400 uppercase text-[10px] tracking-widest">New Alerts</span>
         </div>
-        <span className="font-bold text-gray-400 text-sm">{currentIndex + 1} / {expenses.length}</span>
+        <span className="font-bold text-slate-400 text-xs">{currentIndex + 1} / {expenses.length}</span>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center p-8">
-        <div className="bg-gray-50 w-24 h-24 rounded-3xl flex items-center justify-center text-gray-300 mb-6 border-2 border-dashed border-gray-200">
-          <Building2 size={40} />
+      <div className="flex-1 flex flex-col items-center justify-center p-6">
+        <div className="bg-slate-50 dark:bg-slate-800 w-20 h-20 rounded-[32px] flex items-center justify-center text-slate-300 mb-6 border-2 border-dashed border-slate-200 dark:border-slate-700">
+          <Building2 size={32} />
         </div>
-        <h3 className="text-gray-400 font-bold uppercase tracking-widest text-xs mb-2">Merchant</h3>
-        <h2 className="text-3xl font-extrabold text-center mb-8 text-gray-900">{current.merchant || 'Unidentified'}</h2>
+        <h3 className="text-slate-400 font-bold uppercase tracking-widest text-[9px] mb-1.5">Merchant</h3>
+        <h2 className="text-2xl font-extrabold text-center mb-6 text-slate-900 dark:text-white">{current.merchant || 'Unidentified'}</h2>
         
-        <div className="text-5xl font-extrabold text-gray-900 mb-12">
-          ${current.amount.toLocaleString()}
+        <div className="text-4xl font-extrabold text-slate-900 dark:text-white mb-10">
+          {currencySymbol}{current.amount.toLocaleString()}
         </div>
 
-        <div className="w-full space-y-3">
+        <div className="w-full space-y-2.5">
           {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
             <button
               key={cat}
@@ -63,22 +65,22 @@ const CategorizationModal: React.FC<CategorizationModalProps> = ({ expenses, onC
                 onConfirm(current.id, cat);
                 setCurrentIndex(currentIndex + 1);
               }}
-              className="w-full flex items-center justify-between p-5 rounded-3xl border-2 border-gray-100 hover:border-blue-600 hover:bg-blue-50 transition-all group"
+              className="w-full flex items-center justify-between p-4 rounded-[24px] border-2 border-slate-100 dark:border-slate-800 hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all group"
             >
-              <div className="flex items-center gap-4">
-                <div className="w-4 h-4 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
-                <span className="font-bold text-gray-700 text-lg">{cat}</span>
+              <div className="flex items-center gap-3">
+                <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
+                <span className="font-bold text-slate-700 dark:text-slate-300 text-base">{cat}</span>
               </div>
-              <ArrowRight className="text-gray-300 group-hover:text-blue-600" size={24} />
+              <ArrowRight className="text-slate-300 group-hover:text-indigo-600" size={20} />
             </button>
           ))}
         </div>
       </div>
 
-      <div className="p-6">
+      <div className="p-4">
         <button 
           onClick={onClose}
-          className="w-full text-gray-400 font-bold text-sm hover:text-gray-600 py-4"
+          className="w-full text-slate-400 font-bold text-xs hover:text-slate-600 py-3"
         >
           Skip for now
         </button>

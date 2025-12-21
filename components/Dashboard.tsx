@@ -1,9 +1,8 @@
-
 import React, { useMemo, useState, useEffect } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Expense, UserSettings, Category } from '../types';
-import { CATEGORY_COLORS } from '../constants';
-import { TrendingUp, AlertCircle, Sparkles, ChevronRight, Check } from 'lucide-react';
+import { CATEGORY_COLORS, getCurrencySymbol } from '../constants';
+import { TrendingUp, Sparkles, ArrowUpRight, Wallet, ClipboardPaste, Loader2 } from 'lucide-react';
 import { getBudgetInsights } from '../services/geminiService';
 
 interface DashboardProps {
@@ -11,16 +10,28 @@ interface DashboardProps {
   settings: UserSettings;
   onCategorizeClick: () => void;
   onConfirmExpense: (id: string, category: Category) => void;
+  onSmartAdd: () => void;
+  isProcessingSmartAdd?: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ expenses, settings, onCategorizeClick, onConfirmExpense }) => {
+const Dashboard: React.FC<DashboardProps> = ({ expenses, settings, onCategorizeClick, onConfirmExpense, onSmartAdd, isProcessingSmartAdd }) => {
   const [insights, setInsights] = useState<{ tip: string, impact: string }[] | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
 
   const pendingExpenses = expenses.filter(e => !e.isConfirmed);
+  const currencySymbol = getCurrencySymbol(settings.currency);
   
   const stats = useMemo(() => {
-    const confirmed = expenses.filter(e => e.isConfirmed);
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const currentMonthExpenses = expenses.filter(e => {
+      const d = new Date(e.date);
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    });
+
+    const confirmed = currentMonthExpenses.filter(e => e.isConfirmed);
     const totalsByCat = confirmed.reduce((acc, exp) => {
       acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
       return acc;
@@ -32,22 +43,26 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, settings, onCategorizeC
       Savings: (settings.monthlyIncome * settings.split.Savings) / 100,
     };
 
-    return { totalsByCat, limits };
+    const totalSpent = (totalsByCat.Needs || 0) + (totalsByCat.Wants || 0) + (totalsByCat.Savings || 0);
+
+    return { totalsByCat, limits, totalSpent };
   }, [expenses, settings]);
 
-  const chartData = [
-    { name: 'Needs', value: stats.totalsByCat.Needs || 0, color: CATEGORY_COLORS.Needs },
-    { name: 'Wants', value: stats.totalsByCat.Wants || 0, color: CATEGORY_COLORS.Wants },
-    { name: 'Savings', value: stats.totalsByCat.Savings || 0, color: CATEGORY_COLORS.Savings },
-  ];
+  const chartData = useMemo(() => {
+    const data = [
+      { name: 'Needs', value: stats.totalsByCat.Needs || 0, color: CATEGORY_COLORS.Needs },
+      { name: 'Wants', value: stats.totalsByCat.Wants || 0, color: CATEGORY_COLORS.Wants },
+      { name: 'Savings', value: stats.totalsByCat.Savings || 0, color: CATEGORY_COLORS.Savings },
+    ].filter(d => d.value > 0);
 
-  const totalSpent = chartData.reduce((a, b) => a + b.value, 0);
-  /* Fixed operator '+' cannot be applied to types 'unknown' and 'unknown' by adding explicit type annotations to reduce params */
-  const totalLimit = Object.values(stats.limits).reduce((a: number, b: number) => a + b, 0);
+    return data.length > 0 ? data : [{ name: 'No Data', value: 1, color: '#f1f5f9' }];
+  }, [stats]);
+
+  const hasData = chartData[0].name !== 'No Data';
 
   useEffect(() => {
     async function loadInsights() {
-      if (expenses.length > 2 && !insights) {
+      if (expenses.length > 1 && !insights) {
         setLoadingInsights(true);
         const data = await getBudgetInsights(expenses, settings);
         setInsights(data);
@@ -58,136 +73,187 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, settings, onCategorizeC
   }, [expenses, settings, insights]);
 
   return (
-    <div className="pb-24 pt-4 px-4 space-y-6">
-      {/* Pending Items Banner */}
-      {pendingExpenses.length > 0 && (
-        <button 
-          onClick={onCategorizeClick}
-          className="w-full bg-blue-50 border border-blue-200 p-4 rounded-2xl flex items-center justify-between animate-pulse"
-        >
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-600 text-white p-2 rounded-full">
-              <AlertCircle size={20} />
-            </div>
-            <div className="text-left">
-              <h4 className="font-bold text-blue-900">{pendingExpenses.length} New Expenses</h4>
-              <p className="text-xs text-blue-700">Need to be categorized</p>
-            </div>
-          </div>
-          <ChevronRight className="text-blue-600" size={20} />
-        </button>
-      )}
-
-      {/* Main Stats */}
-      <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="text-gray-500 text-sm font-medium uppercase tracking-wider">Total Spending</h2>
-            <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-extrabold text-gray-900">${totalSpent.toLocaleString()}</span>
-              <span className="text-gray-400 text-sm">/ ${settings.monthlyIncome.toLocaleString()}</span>
-            </div>
-          </div>
-          <div className="p-3 bg-green-50 rounded-full text-green-600">
-            <TrendingUp size={24} />
-          </div>
+    <div className="pb-32 pt-6 space-y-6 bg-white dark:bg-slate-900 min-h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-1">
+        <div>
+          <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Finance Summary</p>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white leading-tight">Overview</h2>
         </div>
-
-        <div className="h-48 w-full relative">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={chartData}
-                innerRadius={60}
-                outerRadius={80}
-                paddingAngle={5}
-                dataKey="value"
-              >
-                {chartData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-             <span className="text-2xl font-bold">{Math.round((totalSpent / settings.monthlyIncome) * 100)}%</span>
-             <span className="text-[10px] text-gray-400 font-semibold uppercase">Budget Used</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 mt-6">
-          {(['Needs', 'Wants', 'Savings'] as Category[]).map((cat) => (
-            <div key={cat} className="text-center">
-              <div 
-                className="w-2 h-2 rounded-full mx-auto mb-1" 
-                style={{ backgroundColor: CATEGORY_COLORS[cat] }} 
-              />
-              <span className="text-[10px] font-bold text-gray-400 uppercase">{cat}</span>
-              <p className="text-sm font-bold">${(stats.totalsByCat[cat] || 0).toLocaleString()}</p>
-            </div>
-          ))}
+        <div className="flex items-center gap-2">
+          {pendingExpenses.length > 0 && (
+            <button 
+              onClick={onCategorizeClick}
+              className="flex items-center gap-2 bg-white dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 py-1.5 px-3 rounded-xl border border-emerald-100 dark:border-emerald-800/50 shadow-sm animate-pulse"
+            >
+              <div className="w-2.5 h-2.5 bg-emerald-600 rounded-full"></div>
+              <span className="text-[10px] font-black uppercase tracking-wider">{pendingExpenses.length} Alerts</span>
+            </button>
+          )}
+          
+          {/* Smart Paste Button */}
+          <button 
+            onClick={onSmartAdd}
+            disabled={isProcessingSmartAdd}
+            className="flex items-center gap-2 bg-indigo-600 text-white py-1.5 px-3 rounded-xl shadow-md shadow-indigo-200 dark:shadow-none transition-transform active:scale-95 disabled:opacity-70"
+          >
+            {isProcessingSmartAdd ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <ClipboardPaste size={14} />
+            )}
+            <span className="text-[10px] font-black uppercase tracking-wider hidden sm:inline">Magic Paste</span>
+          </button>
         </div>
       </div>
 
-      {/* Detailed Bars */}
-      <div className="space-y-4">
-        <h3 className="font-bold text-gray-900 text-lg">Category Breakdown</h3>
+      {/* Main Hero Card with Donut Chart */}
+      <div className="relative overflow-hidden bg-white dark:bg-slate-800 p-6 rounded-[32px] border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none transition-colors">
+        <div className="absolute top-6 right-6">
+          <div className="bg-[#163074] dark:bg-indigo-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-200 dark:shadow-none">
+            <Wallet size={20} strokeWidth={2.5} />
+          </div>
+        </div>
+        
+        <div className="relative z-10">
+          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">Total Expenditure</p>
+          <div className="flex items-baseline gap-1 mb-2">
+            <span className="text-sm font-black text-slate-900 dark:text-white">{currencySymbol}</span>
+            <span className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">{stats.totalSpent.toLocaleString()}</span>
+            <span className="text-slate-400 dark:text-slate-500 font-bold text-xs ml-1">/ {currencySymbol}{settings.monthlyIncome.toLocaleString()}</span>
+          </div>
+
+          <div className="h-64 w-full relative -my-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={70}
+                  outerRadius={95}
+                  paddingAngle={hasData ? 5 : 0}
+                  dataKey="value"
+                  cornerRadius={hasData ? 8 : 0}
+                  stroke="none"
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                {hasData && <Tooltip 
+                  formatter={(value: number) => [`${currencySymbol}${value}`, '']}
+                  contentStyle={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+                    borderRadius: '16px', 
+                    border: 'none', 
+                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                    fontWeight: 'bold',
+                    fontSize: '12px',
+                    color: '#0f172a'
+                  }}
+                  itemStyle={{ color: '#0f172a' }}
+                />}
+              </PieChart>
+            </ResponsiveContainer>
+            
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+               <span className="text-3xl font-black text-slate-900 dark:text-white">
+                 {Math.min(100, Math.round((stats.totalSpent / settings.monthlyIncome) * 100))}%
+               </span>
+               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Spent</span>
+            </div>
+          </div>
+
+          <div className="flex justify-center gap-4 mt-2">
+             {(['Needs', 'Wants', 'Savings'] as const).map(cat => (
+               <div key={cat} className="flex items-center gap-1.5">
+                 <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
+                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">{cat}</span>
+               </div>
+             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Allocation List */}
+      <div className="space-y-3">
         {(['Needs', 'Wants', 'Savings'] as Category[]).map((cat) => {
           const spent = stats.totalsByCat[cat] || 0;
           const limit = stats.limits[cat as keyof typeof stats.limits];
-          const perc = Math.min((spent / limit) * 100, 100);
           const isOver = spent > limit;
+          const perc = Math.min(100, Math.round((spent / limit) * 100));
 
           return (
-            <div key={cat} className="bg-white p-4 rounded-2xl border border-gray-100">
-              <div className="flex justify-between items-center mb-2">
-                <span className="font-semibold text-gray-700">{cat}</span>
-                <span className={`text-sm font-bold ${isOver ? 'text-red-600' : 'text-gray-500'}`}>
-                  ${spent.toLocaleString()} / ${limit.toLocaleString()}
-                </span>
+            <div key={cat} className="bg-white dark:bg-slate-800 p-4 rounded-[20px] border border-slate-100 dark:border-slate-800 shadow-[0_1px_4px_-1px_rgba(0,0,0,0.02)] flex flex-col gap-3 transition-colors">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-md shadow-slate-200 dark:shadow-none" 
+                    style={{ backgroundColor: CATEGORY_COLORS[cat] }}
+                  >
+                    <TrendingUp size={16} />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-900 dark:text-white text-sm leading-none">{cat}</h4>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mt-1">Target: {settings.split[cat as keyof typeof settings.split]}%</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className={`text-sm font-black ${isOver ? 'text-red-500' : 'text-slate-900 dark:text-white'}`}>
+                    {currencySymbol}{spent.toLocaleString()}
+                  </span>
+                </div>
               </div>
-              <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div className="w-full h-2.5 bg-slate-50 dark:bg-slate-700/50 rounded-full overflow-hidden border border-slate-50 dark:border-transparent">
                 <div 
-                  className={`h-full transition-all duration-500 ${isOver ? 'bg-red-500' : ''}`}
+                  className="h-full rounded-full transition-all duration-700 shadow-sm"
                   style={{ 
                     width: `${perc}%`, 
-                    backgroundColor: isOver ? undefined : CATEGORY_COLORS[cat] 
+                    backgroundColor: isOver ? '#ef4444' : CATEGORY_COLORS[cat] 
                   }}
                 />
               </div>
-              {isOver && <p className="text-[10px] text-red-500 mt-1 font-bold">Over limit by ${(spent - limit).toLocaleString()}</p>}
             </div>
           );
         })}
       </div>
 
-      {/* Smart Insights */}
-      <div className="bg-gradient-to-br from-indigo-600 to-blue-700 p-6 rounded-3xl text-white shadow-xl">
+      {/* Insights */}
+      <div className="bg-white dark:bg-emerald-900/10 p-6 rounded-[32px] border border-emerald-100 dark:border-emerald-800/50 shadow-sm transition-colors">
         <div className="flex items-center gap-2 mb-4">
-          <Sparkles className="text-yellow-400" size={24} fill="currentColor" />
-          <h3 className="text-lg font-bold">Smart Insights</h3>
+          <Sparkles className="text-emerald-500" size={16} fill="currentColor" />
+          <h3 className="text-xs font-black text-emerald-900 dark:text-white uppercase tracking-wider">Financial Insights</h3>
         </div>
         
         {loadingInsights ? (
-          <div className="space-y-3">
-            {[1, 2].map(i => <div key={i} className="h-12 bg-white/10 rounded-xl animate-pulse" />)}
+          <div className="space-y-4">
+            {[1, 2].map(i => (
+              <div key={i} className="flex gap-4 items-center animate-pulse">
+                <div className="w-8 h-8 rounded-xl bg-slate-50 dark:bg-white/5"></div>
+                <div className="flex-1 space-y-2">
+                  <div className="h-2 bg-slate-100 dark:bg-white/10 rounded w-3/4"></div>
+                  <div className="h-2 bg-slate-50 dark:bg-white/5 rounded w-1/2"></div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : insights ? (
           <div className="space-y-4">
-            {insights.map((insight, idx) => (
-              <div key={idx} className="flex gap-3">
-                <div className="bg-white/20 p-2 rounded-lg h-fit">
-                  <TrendingUp size={16} />
+            {insights.slice(0, 2).map((insight, idx) => (
+              <div key={idx} className="flex gap-4 items-start group">
+                <div className="bg-white dark:bg-white/5 p-2 rounded-xl shadow-sm border border-slate-50 dark:border-slate-800 group-hover:scale-105 transition-transform">
+                  <ArrowUpRight size={16} className="text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <div>
-                  <p className="text-sm font-medium leading-tight mb-1">{insight.tip}</p>
-                  <p className="text-[10px] text-indigo-200 font-semibold uppercase">{insight.impact}</p>
+                <div className="min-w-0 pt-0.5">
+                  <p className="text-xs font-bold leading-tight text-slate-800 dark:text-emerald-50">{insight.tip}</p>
+                  <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400/70 mt-1 block">{insight.impact}</span>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-indigo-100 italic">Add more confirmed expenses to get AI-powered spending tips!</p>
+          <p className="text-[10px] text-slate-400 font-bold text-center py-2 uppercase tracking-widest">Awaiting spending patterns...</p>
         )}
       </div>
     </div>
