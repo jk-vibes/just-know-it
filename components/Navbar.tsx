@@ -37,18 +37,18 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, remainingPercentage, onVie
               </linearGradient>
             </defs>
             
-            {/* Briefcase Body with dynamic red/green fill and white outline */}
+            {/* Briefcase Body with dynamic red/green fill and adaptive outline */}
             <path 
               d="M4 8C4 7.44772 4.44772 7 5 7H19C19.5523 7 20 7.44772 20 8V20C20 21.1046 19.1046 22 18 22H6C4.89543 22 4 21.1046 4 20V8Z" 
               fill="url(#briefcaseFill)" 
-              stroke="white" 
+              className="stroke-slate-900 dark:stroke-white"
               strokeWidth="1.5"
             />
             
-            {/* Briefcase Handle with white outline */}
+            {/* Briefcase Handle with adaptive outline */}
             <path 
               d="M8 7V5C8 3.89543 8.89543 3 10 3H14C15.1046 3 16 3.89543 16 5V7" 
-              stroke="white" 
+              className="stroke-slate-900 dark:stroke-white"
               strokeWidth="2" 
               strokeLinecap="round" 
             />
