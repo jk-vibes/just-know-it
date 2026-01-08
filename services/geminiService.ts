@@ -45,21 +45,22 @@ export async function getBudgetInsights(expenses: Expense[], settings: UserSetti
   }
 }
 
-export async function parseTransactionText(text: string, currency: string): Promise<{ amount: number, merchant: string, category: Category, date: string } | null> {
+export async function parseTransactionText(text: string, currency: string): Promise<{ amount: number, merchant: string, category: Category, subCategory: string, date: string } | null> {
   const prompt = `
     Analyze this transaction SMS/text: "${text}".
     Currency context: ${currency}.
     
     Extract the amount (number only).
-    Extract the merchant name (short string).
+    Extract the merchant name (short string, e.g., "Uber", "Starbucks").
     Extract the date (YYYY-MM-DD). If no date is found, use today's date.
     
-    Categorize strictly into one of these: 'Needs', 'Wants', 'Savings'. 
+    Categorize into one of these high-level groups: 'Needs', 'Wants', 'Savings'. 
     Logic:
     - Needs: Rent, Utilities, Groceries, Medical, Transport, Fuel.
     - Wants: Dining, Movies, Netflix, Shopping, Entertainment.
     - Savings: Investments, Mutual Funds, Deposits, Transfers to self.
-    - If unclear, use 'Uncategorized'.
+    
+    ALSO extract a specific 'subCategory' (one word, e.g., "Fuel", "Groceries", "Dining", "Commute", "Streaming", "Investment").
   `;
 
   try {
@@ -74,6 +75,7 @@ export async function parseTransactionText(text: string, currency: string): Prom
             amount: { type: Type.NUMBER },
             merchant: { type: Type.STRING },
             category: { type: Type.STRING },
+            subCategory: { type: Type.STRING },
             date: { type: Type.STRING }
           }
         }
@@ -82,7 +84,6 @@ export async function parseTransactionText(text: string, currency: string): Prom
     
     const result = JSON.parse(response.text);
     
-    // Validate category
     const validCategories: Category[] = ['Needs', 'Wants', 'Savings', 'Uncategorized'];
     const category = validCategories.includes(result.category) ? result.category : 'Uncategorized';
 
@@ -90,6 +91,7 @@ export async function parseTransactionText(text: string, currency: string): Prom
       amount: result.amount || 0,
       merchant: result.merchant || 'Unknown Merchant',
       category: category as Category,
+      subCategory: result.subCategory || 'General',
       date: result.date || new Date().toISOString().split('T')[0]
     };
   } catch (error) {
@@ -98,7 +100,7 @@ export async function parseTransactionText(text: string, currency: string): Prom
   }
 }
 
-export async function parseBulkTransactions(text: string, currency: string): Promise<Array<{ amount: number, merchant: string, category: Category, date: string }>> {
+export async function parseBulkTransactions(text: string, currency: string): Promise<Array<{ amount: number, merchant: string, category: Category, subCategory: string, date: string }>> {
   const prompt = `
     Analyze the following text which contains multiple SMS messages/logs:
     ---
@@ -107,19 +109,15 @@ export async function parseBulkTransactions(text: string, currency: string): Pro
     Currency context: ${currency}.
     
     Task:
-    1. Identify all financial expense transactions (debit, purchase, spent). Ignore OTPs, logins, credits, or non-financial messages.
+    1. Identify all financial expense transactions.
     2. For each valid transaction, extract:
        - amount (number)
        - merchant (short name)
-       - date (YYYY-MM-DD, use today if missing)
+       - date (YYYY-MM-DD)
        - category (Strictly: 'Needs', 'Wants', 'Savings', 'Uncategorized')
+       - subCategory (e.g., "Coffee", "Taxi", "Rent", "Grocery", "Investment")
     
-    Logic for Category:
-    - Needs: Essentials, Bills, Fuel, Groceries.
-    - Wants: Fun, Dining, Shopping, Travel.
-    - Savings: Investments.
-    
-    Return a JSON array of objects. If no transactions found, return [].
+    Return a JSON array of objects.
   `;
 
   try {
@@ -136,6 +134,7 @@ export async function parseBulkTransactions(text: string, currency: string): Pro
               amount: { type: Type.NUMBER },
               merchant: { type: Type.STRING },
               category: { type: Type.STRING },
+              subCategory: { type: Type.STRING },
               date: { type: Type.STRING }
             }
           }
@@ -150,6 +149,7 @@ export async function parseBulkTransactions(text: string, currency: string): Pro
       amount: r.amount || 0,
       merchant: r.merchant || 'Unknown',
       category: validCategories.includes(r.category) ? r.category : 'Uncategorized',
+      subCategory: r.subCategory || 'General',
       date: r.date || new Date().toISOString().split('T')[0]
     }));
   } catch (error) {

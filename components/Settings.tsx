@@ -1,13 +1,15 @@
+
 import React, { useState } from 'react';
 import { UserSettings, UserProfile } from '../types';
 import { SUPPORTED_CURRENCIES } from '../constants';
 import { 
   User, LogOut, Shield, Bell, HelpCircle, 
   ChevronRight, Calculator, Moon, Sun, 
-  Cloud, RefreshCw, Smartphone, Coins, Trash2, Check, Database, Eraser, Filter
+  Cloud, RefreshCw, Smartphone, Coins, Trash2, Check, Database, Eraser, Filter,
+  History, ShieldCheck, ExternalLink
 } from 'lucide-react';
 
-interface ProfileSettingsProps {
+interface SettingsProps {
   settings: UserSettings;
   user: UserProfile | null;
   onLogout: () => void;
@@ -21,7 +23,7 @@ interface ProfileSettingsProps {
   onClearExpenses: () => void;
 }
 
-const ProfileSettings: React.FC<ProfileSettingsProps> = ({ 
+const Settings: React.FC<SettingsProps> = ({ 
   settings, 
   user, 
   onLogout, 
@@ -39,9 +41,28 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
   const currentCurrency = SUPPORTED_CURRENCIES.find(c => c.code === settings.currency) || SUPPORTED_CURRENCIES[0];
 
+  const lastSyncedDate = settings.lastSynced 
+    ? new Date(settings.lastSynced).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : 'Never';
+
   return (
     <div className="pb-32 pt-6 space-y-6 dark:text-slate-100">
       
+      {/* Profile Header */}
+      <div className="flex items-center gap-4 bg-white dark:bg-slate-800 p-5 rounded-[32px] border border-slate-50 dark:border-slate-800 shadow-sm">
+        <div className="relative">
+          <img src={user?.avatar} alt="User" className="w-14 h-14 rounded-2xl bg-slate-100 border-2 border-white dark:border-slate-700" />
+          <div className="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800"></div>
+        </div>
+        <div className="flex-1">
+          <h2 className="text-lg font-black text-slate-900 dark:text-white leading-tight">{user?.name}</h2>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user?.email}</p>
+        </div>
+        <div className="bg-indigo-50 dark:bg-indigo-950 p-2 rounded-xl text-indigo-600 dark:text-indigo-400">
+          <ShieldCheck size={20} />
+        </div>
+      </div>
+
       {/* Quick Settings Grid */}
       <div className="grid grid-cols-2 gap-3">
         <button 
@@ -63,6 +84,38 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           </div>
           <span className="text-[10px] font-black uppercase tracking-tight">{isSyncing ? 'Syncing...' : 'Cloud Backup'}</span>
         </button>
+      </div>
+
+      {/* Cloud Status Card */}
+      <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-[32px] border border-slate-100 dark:border-slate-800 space-y-4">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <History size={16} className="text-indigo-600 dark:text-indigo-400" />
+            <h3 className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Storage Status</h3>
+          </div>
+          <span className="text-[9px] font-black text-emerald-500 uppercase bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-lg tracking-widest">Connected</span>
+        </div>
+        
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Google Drive Backup</span>
+            <span className="text-xs font-black text-slate-900 dark:text-white mt-1">{lastSyncedDate}</span>
+          </div>
+          <div className="flex flex-col items-end">
+             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Auto-Sync</span>
+             <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 mt-1 uppercase tracking-tighter">Enabled</span>
+          </div>
+        </div>
+
+        <div className="pt-2">
+           <button 
+             onClick={onSync}
+             disabled={isSyncing}
+             className="w-full bg-white dark:bg-slate-700 p-3 rounded-2xl text-[10px] font-black text-[#163074] dark:text-white uppercase tracking-widest border border-slate-200 dark:border-slate-600 active:scale-95 transition-all flex items-center justify-center gap-2"
+           >
+             <Cloud size={14} /> {isSyncing ? 'Processing...' : 'Force Cloud Sync'}
+           </button>
+        </div>
       </div>
 
       {/* Target Allocation Card */}
@@ -203,7 +256,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
       <div className="text-center pt-2 pb-8">
         <span className="text-[9px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-[0.2em]">
-          Just Know It • v1.0
+          Just Know It • v1.1
         </span>
       </div>
 
@@ -257,4 +310,4 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   );
 };
 
-export default ProfileSettings;
+export default Settings;
