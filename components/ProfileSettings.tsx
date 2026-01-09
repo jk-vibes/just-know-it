@@ -203,7 +203,7 @@ const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
       <div className="text-center pt-2 pb-8">
         <span className="text-[9px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-[0.2em]">
-          Just Know It • v1.0
+          Just Keep It • v1.0
         </span>
       </div>
 

@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { LogIn, ShieldCheck } from 'lucide-react';
+import { LogIn, ShieldCheck, UserCircle, Globe, Sparkles, Fingerprint } from 'lucide-react';
 
 interface AuthScreenProps {
   onLogin: (user: UserProfile) => void;
@@ -9,10 +9,10 @@ interface AuthScreenProps {
 
 const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
 
   const handleGoogleSignIn = () => {
     setLoading(true);
-    // Simulating Google OAuth redirect and token return
     setTimeout(() => {
       onLogin({
         id: 'google-123',
@@ -22,35 +22,55 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
         accessToken: 'simulated_oauth_token_xyz_123'
       });
       setLoading(false);
-    }, 1500);
+    }, 1200);
+  };
+
+  const handleGuestSignIn = () => {
+    setGuestLoading(true);
+    setTimeout(() => {
+      onLogin({
+        id: 'guest-' + Math.random().toString(36).substring(7),
+        name: 'Guest User',
+        email: 'guest@local.host',
+        avatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=Guest',
+      });
+      setGuestLoading(false);
+    }, 800);
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-900 flex flex-col p-8 relative overflow-hidden transition-colors">
-      <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-[#163074]/5 dark:bg-white/5 rounded-full blur-3xl"></div>
-      <div className="absolute bottom-[-5%] left-[-5%] w-48 h-48 bg-[#f14444]/5 dark:bg-red-400/5 rounded-full blur-2xl"></div>
+    <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center p-8 relative overflow-hidden transition-all duration-700">
+      {/* Dynamic Background Elements */}
+      <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-brand-primary/10 rounded-full blur-[120px] animate-pulse-slow"></div>
+      <div className="absolute bottom-[-10%] left-[-20%] w-[400px] h-[400px] bg-brand-accent/10 rounded-full blur-[100px] animate-pulse-slow" style={{ animationDelay: '3s' }}></div>
+      <div className="absolute top-[20%] left-[-10%] w-[300px] h-[300px] bg-purple-600/5 rounded-full blur-[80px]"></div>
       
-      <div className="flex-1 flex flex-col justify-center items-center text-center">
-        {/* Briefcase Brand Logo */}
-        <div className="mb-12 group animate-kick">
-          <div className="relative">
+      {/* Decorative Grid Pattern */}
+      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10 pointer-events-none"></div>
+
+      <div className="relative z-10 w-full max-w-sm flex flex-col items-center">
+        
+        {/* Portal Branding */}
+        <div className="mb-14 relative group">
+          <div className="absolute inset-0 bg-brand-primary/20 blur-3xl group-hover:bg-brand-primary/30 transition-all duration-500 rounded-full"></div>
+          <div className="relative bg-white/5 backdrop-blur-3xl p-8 rounded-[40px] border border-white/10 shadow-2xl transform transition-transform group-hover:scale-105 duration-500">
             <svg 
-              width="96" 
-              height="96" 
+              width="80" 
+              height="80" 
               viewBox="0 0 24 24" 
               fill="none" 
               xmlns="http://www.w3.org/2000/svg" 
-              className="drop-shadow-2xl"
+              className="drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]"
             >
               <path 
                 d="M4 8C4 7.44772 4.44772 7 5 7H19C19.5523 7 20 7.44772 20 8V20C20 21.1046 19.1046 22 18 22H6C4.89543 22 4 21.1046 4 20V8Z" 
-                fill="#163074" 
-                className="dark:fill-indigo-600"
+                fill="currentColor" 
+                className="text-brand-primary"
               />
               <path 
                 d="M8 7V5C8 3.89543 8.89543 3 10 3H14C15.1046 3 16 3.89543 16 5V7" 
-                stroke="#163074" 
-                className="dark:stroke-indigo-600"
+                stroke="currentColor" 
+                className="text-brand-primary"
                 strokeWidth="2" 
                 strokeLinecap="round" 
               />
@@ -66,48 +86,78 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                 JK
               </text>
             </svg>
-            <div className="absolute -top-1 -right-1 bg-[#f14444] w-6 h-6 rounded-full border-2 border-white dark:border-slate-900 shadow-md"></div>
+          </div>
+          
+          {/* Floating Accents */}
+          <div className="absolute -top-4 -right-4 bg-brand-accent p-2 rounded-2xl shadow-lg animate-bounce-slow">
+            <Sparkles size={16} className="text-white" />
           </div>
         </div>
         
-        <div className="space-y-2 mb-12">
-          <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">Just Know It</h1>
-          <div className="flex justify-center gap-1.5">
-            <div className="bg-slate-50 dark:bg-white/5 px-2 py-0.5 rounded-full border border-slate-100 dark:border-white/10">
-              <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Premium Tracking</span>
-            </div>
+        {/* Hero Text */}
+        <div className="text-center space-y-4 mb-14">
+          <h1 className="text-5xl font-black text-white tracking-tighter lowercase">just keep it</h1>
+          <div className="flex justify-center gap-2">
+            <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.3em] bg-brand-primary/10 px-3 py-1 rounded-full border border-brand-primary/20">The Wealth Portal</span>
           </div>
+          <p className="text-slate-400 text-sm font-medium leading-relaxed max-w-[240px] mx-auto mt-4">
+            A premium interface for your personal capital. Secure, automated, and insightful.
+          </p>
         </div>
 
-        <p className="text-slate-500 dark:text-slate-400 text-lg mb-12 max-w-xs font-bold leading-tight">
-          Seamless financial tracking with automatic Google Drive cloud backup.
-        </p>
-
-        <div className="w-full max-w-sm space-y-4">
+        {/* Login Container */}
+        <div className="w-full space-y-4">
           <button
             onClick={handleGoogleSignIn}
-            disabled={loading}
-            className="w-full bg-[#163074] dark:bg-indigo-600 text-white font-black py-5 rounded-[24px] flex items-center justify-center gap-3 shadow-2xl border border-transparent hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-70 uppercase tracking-widest text-xs"
+            disabled={loading || guestLoading}
+            className="group relative w-full bg-white text-slate-900 font-black py-5 rounded-[28px] flex items-center justify-center gap-3 shadow-[0_20px_40px_-10px_rgba(255,255,255,0.1)] hover:shadow-white/20 hover:scale-[1.02] active:scale-95 transition-all duration-300 disabled:opacity-70 uppercase tracking-widest text-xs"
           >
             {loading ? (
-              <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-5 h-5 border-3 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
             ) : (
               <>
-                <LogIn size={20} />
-                Connect Google Account
+                <LogIn size={18} strokeWidth={3} />
+                Enter with Google
               </>
             )}
           </button>
-          
-          <div className="flex items-center justify-center gap-2 text-slate-400 dark:text-slate-500 text-[10px] font-black uppercase tracking-widest mt-8">
-            <ShieldCheck size={14} className="text-[#f14444]" />
-            Encrypted Drive Storage
-          </div>
-        </div>
-      </div>
 
-      <div className="text-slate-300 dark:text-slate-700 text-[10px] font-black uppercase tracking-widest text-center">
-        Interface Experience • v1.3
+          <button
+            onClick={handleGuestSignIn}
+            disabled={loading || guestLoading}
+            className="w-full bg-white/5 backdrop-blur-md text-white font-black py-5 rounded-[28px] flex items-center justify-center gap-3 border border-white/10 hover:bg-white/10 transition-all duration-300 disabled:opacity-70 uppercase tracking-widest text-[11px]"
+          >
+            {guestLoading ? (
+              <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <>
+                <UserCircle size={18} strokeWidth={2.5} className="text-slate-400" />
+                Explore as Guest
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Footer Features */}
+        <div className="mt-16 grid grid-cols-2 gap-8 w-full">
+           <div className="flex flex-col items-center gap-2">
+             <div className="p-3 bg-white/5 rounded-2xl border border-white/5">
+                <ShieldCheck size={18} className="text-emerald-500" />
+             </div>
+             <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">End-to-End Secure</span>
+           </div>
+           <div className="flex flex-col items-center gap-2">
+             <div className="p-3 bg-white/5 rounded-2xl border border-white/5">
+                <Globe size={18} className="text-indigo-400" />
+             </div>
+             <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Global Sync</span>
+           </div>
+        </div>
+
+        <div className="mt-20 flex items-center gap-2 py-4 px-6 bg-white/5 rounded-full border border-white/5 opacity-40 hover:opacity-100 transition-opacity">
+          <Fingerprint size={14} className="text-brand-primary" />
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Build 2.0.4 • Stable</span>
+        </div>
       </div>
     </div>
   );

@@ -4,6 +4,9 @@ export type Frequency = 'None' | 'Weekly' | 'Monthly' | 'Yearly';
 export type IncomeType = 'Salary' | 'Freelance' | 'Investment' | 'Gift' | 'Other';
 export type AppTheme = 'Standard' | 'Spiderman' | 'CaptainAmerica' | 'Naruto';
 
+export type WealthType = 'Investment' | 'Liability';
+export type WealthCategory = 'Stock' | 'Mutual Fund' | 'Crypto' | 'Gold' | 'Real Estate' | 'Loan' | 'Credit Card' | 'Other';
+
 export interface Expense {
   id: string;
   amount: number;
@@ -25,6 +28,16 @@ export interface Income {
   isMock?: boolean;
 }
 
+export interface WealthItem {
+  id: string;
+  type: WealthType;
+  category: WealthCategory;
+  name: string;
+  value: number;
+  date: string;
+  isMock?: boolean;
+}
+
 export interface BudgetRule {
   id: string;
   keyword: string;
@@ -40,6 +53,16 @@ export interface RecurringItem {
   merchant?: string;
   frequency: Frequency;
   nextDueDate: string;
+}
+
+export interface Notification {
+  id: string;
+  type: 'AI' | 'Activity';
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  severity?: 'info' | 'success' | 'warning' | 'error';
 }
 
 export interface UserSettings {
@@ -66,4 +89,4 @@ export interface UserProfile {
   accessToken?: string;
 }
 
-export type View = 'Dashboard' | 'Expenses' | 'Rules' | 'Profile' | 'Add' | 'Auth';
+export type View = 'Dashboard' | 'Expenses' | 'Rules' | 'Profile' | 'Add' | 'Auth' | 'Wealth';

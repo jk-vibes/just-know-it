@@ -1,9 +1,10 @@
+
 import { Category } from './types';
 
 export const CATEGORY_COLORS: Record<Category, string> = {
-  Needs: '#ef4444',     // Red
-  Wants: '#8b5cf6',     // Violet
-  Savings: '#10b981',   // Emerald
+  Needs: '#ff3d71',     // Vibrant Electric Rose
+  Wants: '#8b5cf6',     // Rich Violet
+  Savings: '#00d68f',   // Vivid Emerald
   Uncategorized: '#94a3b8' // Slate
 };
 

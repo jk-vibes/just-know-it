@@ -1,340 +1,333 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Expense, Income, Category, UserSettings } from '../types';
+import { Expense, Income, Category, UserSettings, WealthItem, Notification } from '../types';
 import { CATEGORY_COLORS, getCurrencySymbol } from '../constants';
-import { Filter, Trash2, Search, X, Sparkles, ClipboardPaste, MessageSquare, Loader2, ArrowUpCircle, Landmark, ArrowDownCircle, Plus, Edit2, Check } from 'lucide-react';
+import { Trash2, Search, X, Sparkles, Loader2, Landmark, Edit2, ChevronLeft, ChevronRight, FileUp, FileText, Briefcase, CreditCard, ClipboardPaste, MessageSquare } from 'lucide-react';
 import { parseBulkTransactions } from '../services/geminiService';
 
 interface RecordListProps {
   expenses: Expense[];
   incomes: Income[];
+  wealthItems: WealthItem[];
   settings: UserSettings;
   onDeleteExpense: (id: string) => void;
   onDeleteIncome: (id: string) => void;
+  onDeleteWealth: (id: string) => void;
   onConfirm: (id: string, category: Category) => void;
   onUpdateExpense: (id: string, updates: Partial<Expense>) => void;
-  onEditRecord: (record: Expense | Income) => void;
+  onEditRecord: (record: Expense | Income | WealthItem) => void;
   onAddBulk: (expenses: Omit<Expense, 'id'>[]) => void;
+  viewDate: Date;
+  onMonthChange: (direction: number) => void;
+  onGoToDate: (year: number, month: number) => void;
+  addNotification: (notif: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
 }
 
-interface SwipeableItemProps {
-  item: Expense | Income;
-  isIncome: boolean;
+const SwipeableItem: React.FC<{
+  item: Expense | Income | WealthItem;
+  recordType: 'expense' | 'income' | 'wealth';
   currencySymbol: string;
   onDelete: (id: string) => void;
-  onEdit: (item: Expense | Income) => void;
+  onEdit: (item: any) => void;
   onUpdateExpense?: (id: string, updates: Partial<Expense>) => void;
-  suggestions?: string[];
-}
-
-const SwipeableItem: React.FC<SwipeableItemProps> = ({ item, isIncome, currencySymbol, onDelete, onEdit, onUpdateExpense, suggestions = [] }) => {
+}> = ({ item, recordType, currencySymbol, onDelete, onEdit }) => {
   const [offsetX, setOffsetX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isEditingSub, setIsEditingSub] = useState(false);
-  const [newSub, setNewSub] = useState('');
   const touchStartX = useRef<number | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isDeleting || isEditingSub) return;
-    if (e.touches.length > 0) {
-      touchStartX.current = e.touches[0].clientX;
-      setIsSwiping(true);
-    }
+    if (isDeleting) return;
+    if (e.touches.length > 0) { touchStartX.current = e.touches[0].clientX; setIsSwiping(true); }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (isDeleting || touchStartX.current === null || e.touches.length === 0 || isEditingSub) return;
-    const currentX = e.touches[0].clientX;
-    const diff = currentX - touchStartX.current;
+    if (isDeleting || touchStartX.current === null || e.touches.length === 0) return;
+    const diff = e.touches[0].clientX - touchStartX.current;
     if (diff < 0) setOffsetX(diff);
   };
 
   const handleTouchEnd = () => {
-    if (isDeleting || isEditingSub) return;
+    if (isDeleting) return;
     if (offsetX < -75) {
-      triggerDelete();
-    } else {
-      setOffsetX(0);
-    }
+      setOffsetX(-1000);
+      setIsDeleting(true);
+      setTimeout(() => onDelete(item.id), 300);
+    } else { setOffsetX(0); }
     setIsSwiping(false);
     touchStartX.current = null;
   };
 
-  const triggerDelete = () => {
-    setOffsetX(-1000);
-    setIsDeleting(true);
-    setTimeout(() => {
-      onDelete(item.id);
-    }, 300);
-  };
-
-  const handleSaveSub = (val: string) => {
-    if (!isIncome && onUpdateExpense) {
-      onUpdateExpense(item.id, { subCategory: val || 'General' });
-    }
-    setIsEditingSub(false);
-  };
-
-  const amount = item.amount;
-  const dateStr = new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const label = isIncome ? (item as Income).type : (item as Expense).category;
-  const subLabel = !isIncome ? (item as Expense).subCategory : null;
-  const note = item.note || (isIncome ? 'Income Source' : 'General Expense');
+  const amount = (item as any).amount || (item as any).value;
+  const label = recordType === 'wealth' ? (item as WealthItem).category : recordType === 'income' ? (item as Income).type : (item as Expense).category;
+  const name = (item as any).merchant || (item as any).note || (item as any).name || 'Entry';
+  const isLiability = recordType === 'wealth' && (item as WealthItem).type === 'Liability';
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl group select-none transition-all duration-300 ease-out ${isDeleting ? 'max-h-0 opacity-0 mb-0 scale-95' : 'max-h-40 opacity-100 mb-2 scale-100'} animate-slide-up`}>
-      <div className="absolute inset-0 bg-rose-500 flex items-center justify-end px-5 rounded-2xl">
-        <Trash2 className="text-white animate-pulse" size={20} />
-      </div>
-
+    <div className={`relative overflow-hidden group transition-all duration-300 ${isDeleting ? 'max-h-0 opacity-0' : 'max-h-24 opacity-100'} animate-slide-up`}>
+      <div className="absolute inset-0 bg-rose-500 flex items-center justify-end px-5"><Trash2 className="text-white animate-pulse" size={20} /></div>
       <div 
-        className={`bg-white dark:bg-slate-800 p-2 rounded-2xl border shadow-[0_1px_4px_-1px_rgba(0,0,0,0.02)] relative z-10 transition-transform ${isIncome ? 'border-indigo-100 dark:border-indigo-900/30' : 'border-slate-100 dark:border-slate-800'}`}
-        style={{ 
-          transform: `translateX(${offsetX}px)`, 
-          transition: isSwiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' 
-        }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        className={`relative z-10 py-3 px-1 border-b border-slate-100 dark:border-slate-800/60 bg-white dark:bg-slate-900 transition-transform`}
+        style={{ transform: `translateX(${offsetX}px)`, transition: isSwiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
+        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div 
-              className={`w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-[10px] shadow-sm transition-transform group-hover:scale-105`}
-              style={{ backgroundColor: isIncome ? '#4f46e5' : CATEGORY_COLORS[(item as Expense).category] }}
-            >
-              {isIncome ? <Landmark size={14} /> : label[0]}
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-[9px] shadow-sm`} style={{ backgroundColor: recordType === 'income' ? '#4f46e5' : recordType === 'wealth' ? (isLiability ? '#f59e0b' : '#10b981') : CATEGORY_COLORS[(item as Expense).category] }}>
+              {recordType === 'income' ? <Landmark size={12} /> : recordType === 'wealth' ? (isLiability ? <CreditCard size={12} /> : <Briefcase size={12} />) : label[0]}
             </div>
             <div className="min-w-0">
-              <h4 className="font-black text-slate-900 dark:text-white text-xs leading-tight truncate max-w-[120px]">{note}</h4>
-              <div className="flex flex-wrap items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase mt-0.5 tracking-tight">
-                {dateStr}
-                {!isIncome && !(item as Expense).isConfirmed && <span className="text-amber-500 font-black animate-pulse">• Pending</span>}
-                {isIncome && <span className="text-indigo-500 font-black tracking-widest">• Inflow</span>}
-              </div>
+              <h4 className="font-black text-slate-800 dark:text-slate-200 text-xs truncate max-w-[140px]">{name}</h4>
+              <p className="text-[8px] text-slate-400 font-bold uppercase tracking-tight">{label}</p>
             </div>
           </div>
           <div className="text-right flex items-center gap-2">
             <div className="flex flex-col items-end">
-              <p className={`font-black text-sm ${isIncome ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-900 dark:text-white'}`}>
-                {isIncome ? '+' : '-'}{currencySymbol}{amount.toLocaleString()}
+              <p className={`font-black text-sm ${recordType === 'income' ? 'text-indigo-600' : isLiability ? 'text-rose-500' : 'text-slate-900 dark:text-white'}`}>
+                {recordType === 'income' ? '+' : recordType === 'wealth' ? '' : '-'}{currencySymbol}{amount.toLocaleString()}
               </p>
-              <p className="text-[8px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">{label}</p>
+              <p className="text-[7px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-widest">{recordType}</p>
             </div>
-            <div className="flex flex-col gap-1 sm:flex-row">
-              <button 
-                onClick={(e) => { e.stopPropagation(); onEdit(item); }}
-                className="p-1.5 text-slate-300 hover:text-indigo-500 dark:text-slate-600 dark:hover:text-indigo-400 transition-colors opacity-0 group-hover:opacity-100 hidden sm:block"
-              >
-                <Edit2 size={16} />
-              </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); triggerDelete(); }}
-                className="p-1.5 text-slate-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400 transition-colors opacity-0 group-hover:opacity-100 hidden sm:block"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
+            <button onClick={() => onEdit(item)} className="p-1 text-slate-300 hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-all"><Edit2 size={14} /></button>
           </div>
         </div>
-
-        {/* Sub-category area */}
-        {!isIncome && (
-          <div className="mt-2 pl-12 pr-2">
-            {isEditingSub ? (
-              <div className="space-y-2 animate-kick">
-                <div className="flex gap-2">
-                  <input 
-                    autoFocus
-                    type="text"
-                    value={newSub}
-                    onChange={(e) => setNewSub(e.target.value)}
-                    placeholder="New Sub Category..."
-                    className="flex-1 bg-slate-50 dark:bg-slate-900 text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-lg border border-indigo-100 dark:border-slate-700 outline-none focus:border-indigo-500 dark:text-white"
-                  />
-                  <button 
-                    onClick={() => handleSaveSub(newSub)}
-                    className="bg-emerald-500 text-white p-1.5 rounded-lg shadow-sm active:scale-95"
-                  >
-                    <Check size={14} strokeWidth={3} />
-                  </button>
-                  <button 
-                    onClick={() => setIsEditingSub(false)}
-                    className="bg-slate-100 dark:bg-slate-700 text-slate-400 p-1.5 rounded-lg active:scale-95"
-                  >
-                    <X size={14} strokeWidth={3} />
-                  </button>
-                </div>
-                {suggestions.length > 0 && (
-                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-                    {suggestions.map(s => (
-                      <button 
-                        key={s}
-                        onClick={() => handleSaveSub(s)}
-                        className="whitespace-nowrap bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-300 text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-full border border-indigo-100 dark:border-indigo-900/50 active:scale-95"
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex justify-between items-center">
-                <button 
-                  onClick={() => {
-                    setNewSub(subLabel || '');
-                    setIsEditingSub(true);
-                  }}
-                  className="flex items-center gap-1.5 hover:opacity-80 transition-all group/sub"
-                >
-                  <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${subLabel ? 'text-indigo-500 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/50' : 'text-slate-300 dark:text-slate-600 border border-dashed border-slate-200 dark:border-slate-700'}`}>
-                    {subLabel || 'Add Sub Category'}
-                  </span>
-                  <Edit2 size={8} className="text-slate-300 opacity-0 group-hover/sub:opacity-100 transition-opacity" />
-                </button>
-                <button 
-                  onClick={() => onEdit(item)}
-                  className="p-1 text-indigo-500 sm:hidden"
-                >
-                  <Edit2 size={14} />
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {isIncome && (
-          <div className="mt-1 pl-12 flex justify-end pr-2">
-            <button 
-              onClick={() => onEdit(item)}
-              className="p-1 text-indigo-500 sm:hidden flex items-center gap-1"
-            >
-              <span className="text-[9px] font-black uppercase tracking-widest">Edit</span>
-              <Edit2 size={12} />
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
 };
 
-const RecordList: React.FC<RecordListProps> = ({ expenses, incomes, settings, onDeleteExpense, onDeleteIncome, onConfirm, onUpdateExpense, onEditRecord, onAddBulk }) => {
+const RecordList: React.FC<RecordListProps> = ({ 
+  expenses, incomes, wealthItems, settings, onDeleteExpense, onDeleteIncome, onDeleteWealth, onEditRecord, onAddBulk, viewDate, addNotification
+}) => {
+  const [activeTab, setActiveTab] = useState<'activity' | 'portfolio'>('activity');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importText, setImportText] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [importSource, setImportSource] = useState<'text' | 'file'>('text');
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const currencySymbol = getCurrencySymbol(settings.currency);
+  const monthLabelCompact = `${viewDate.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}'${viewDate.getFullYear().toString().slice(-2)}`;
 
-  const subCategorySuggestions = useMemo(() => {
-    const suggestions: Record<string, Set<string>> = {};
-    expenses.forEach(e => {
-      if (e.subCategory && e.subCategory !== 'General') {
-        if (!suggestions[e.category]) suggestions[e.category] = new Set();
-        suggestions[e.category].add(e.subCategory);
-      }
-    });
-    const final: Record<string, string[]> = {};
-    Object.keys(suggestions).forEach(cat => {
-      final[cat] = Array.from(suggestions[cat]).slice(0, 5);
-    });
-    return final;
-  }, [expenses]);
+  const activityRecords = useMemo(() => {
+    const m = viewDate.getMonth();
+    const y = viewDate.getFullYear();
+    const exps = expenses.filter(e => { const d = new Date(e.date); return d.getMonth() === m && d.getFullYear() === y; }).map(e => ({ ...e, recordType: 'expense' as const }));
+    const incs = incomes.filter(i => { const d = new Date(i.date); return d.getMonth() === m && d.getFullYear() === y; }).map(i => ({ ...i, recordType: 'income' as const }));
+    return [...exps, ...incs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [expenses, incomes, viewDate]);
 
-  const combinedRecords = useMemo(() => {
-    const exps = expenses.map(e => ({ ...e, recordType: 'expense' as const }));
-    const incs = incomes.map(i => ({ ...i, recordType: 'income' as const }));
-    const all = [...exps, ...incs] as ( (Expense & { recordType: 'expense' }) | (Income & { recordType: 'income' }) )[];
+  const filteredRecords = useMemo(() => {
+    const list = activeTab === 'activity' ? activityRecords : wealthItems.map(w => ({ ...w, recordType: 'wealth' as const }));
+    return list.filter(rec => {
+      const q = searchQuery.toLowerCase().trim();
+      if (!q) return true;
+      const note = ((rec as any).note || (rec as any).merchant || (rec as any).name || '').toLowerCase();
+      return note.includes(q) || (rec as any).amount?.toString().includes(q) || (rec as any).value?.toString().includes(q);
+    });
+  }, [activeTab, activityRecords, wealthItems, searchQuery]);
+
+  const handleBatchImport = async (textToProcess: string) => {
+    if (!textToProcess.trim()) return;
     
-    return all.filter(rec => {
-      const query = searchQuery.toLowerCase().trim();
-      if (!query) return true;
-      const note = (rec.note || '').toLowerCase();
-      const amount = rec.amount.toString();
-      const catOrType = rec.recordType === 'expense' ? (rec as Expense).category.toLowerCase() : (rec as Income).type.toLowerCase();
-      const subCat = rec.recordType === 'expense' ? (rec as Expense).subCategory?.toLowerCase() || '' : '';
-      return note.includes(query) || amount.includes(query) || catOrType.includes(query) || subCat.includes(query);
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [expenses, incomes, searchQuery]);
-
-  const handleBulkImport = async () => {
-    if (!importText.trim()) return;
+    // Close modal immediately and clear text
+    setShowImportModal(false);
+    setImportText('');
+    
+    // Start processing in background
     setIsAnalyzing(true);
-    const results = await parseBulkTransactions(importText, settings.currency);
-    setIsAnalyzing(false);
-    if (results && results.length > 0) {
-      onAddBulk(results);
-      setImportText('');
-      setShowImportModal(false);
+    
+    addNotification({
+      type: 'Activity',
+      title: 'Import Started',
+      message: 'Processing your transactions in the background. We will notify you when finished.',
+      severity: 'info'
+    });
+
+    try {
+      const lines = textToProcess.split('\n').filter(l => l.trim().length > 0);
+      let totalImported = 0;
+      const CHUNK_SIZE = 15;
+
+      for (let i = 0; i < lines.length; i += CHUNK_SIZE) {
+        const chunk = lines.slice(i, i + CHUNK_SIZE).join('\n');
+        const chunkResults = await parseBulkTransactions(chunk, settings.currency);
+        if (chunkResults && chunkResults.length > 0) {
+          onAddBulk(chunkResults);
+          totalImported += chunkResults.length;
+        }
+      }
+      
+      addNotification({
+        type: 'Activity',
+        title: 'Import Complete',
+        message: `Successfully processed and added ${totalImported} new transactions.`,
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error("Background import error", err);
+      addNotification({
+        type: 'Activity',
+        title: 'Import Error',
+        message: 'Something went wrong while processing your CSV data.',
+        severity: 'error'
+      });
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      const rows = content.split('\n');
+      if (rows.length < 2) return;
+
+      const headers = rows[0].toLowerCase().split(',');
+      const bodyIdx = headers.findIndex(h => h.includes('body') || h.includes('content') || h.includes('msg') || h.includes('sms'));
+      
+      if (bodyIdx === -1) {
+        alert("CSV format not recognized. We need a column for message text (e.g., 'body', 'content').");
+        return;
+      }
+
+      const extractedMessages = rows.slice(1)
+        .map(row => {
+          const cols = row.split(',');
+          return cols[bodyIdx]?.trim();
+        })
+        .filter(msg => {
+          if (!msg) return false;
+          const m = msg.toLowerCase();
+          return m.includes('spent') || m.includes('debited') || m.includes('credited') || m.includes('salary') || m.includes('paid') || m.includes('upi');
+        })
+        .join('\n');
+
+      if (!extractedMessages) {
+        alert("No clear financial transactions found in this file.");
+        return;
+      }
+      
+      setImportText(extractedMessages);
+      setImportSource('text'); // Switch to text mode for user review before running AI
+    };
+    reader.readAsText(file);
+  };
+
   return (
-    <div className="pb-32 pt-2 min-h-full">
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md py-2 -mx-4 px-4 mb-2 flex gap-2 transition-colors">
-        <div className="relative group flex-1">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-            <Search size={16} />
-          </div>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search all records..."
-            className="w-full bg-slate-100 dark:bg-slate-800 pl-10 pr-10 py-3 rounded-2xl text-sm font-bold outline-none border border-transparent focus:border-slate-200 dark:focus:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 transition-all shadow-sm"
-          />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-slate-200 dark:bg-slate-700 rounded-full text-slate-500"><X size={12} /></button>
-          )}
+    <div className="pb-32 pt-1 min-h-full">
+      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md py-1.5 -mx-4 px-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between mb-2">
+           <h2 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">{activeTab === 'activity' ? monthLabelCompact : 'PORTFOLIO'}</h2>
+           <div className="flex items-center gap-1">
+             <button onClick={() => setIsSearchOpen(!isSearchOpen)} className={`p-1.5 rounded-lg ${isSearchOpen ? 'text-indigo-600' : 'text-slate-400'}`}><Search size={16} /></button>
+             {activeTab === 'activity' && (
+               <button onClick={() => setShowImportModal(true)} className="p-1.5 text-slate-400 hover:text-indigo-600 relative">
+                 <Sparkles size={16} />
+                 {isAnalyzing && (
+                   <span className="absolute top-0 right-0 w-2 h-2 bg-indigo-500 rounded-full animate-pulse border border-white dark:border-slate-900"></span>
+                 )}
+               </button>
+             )}
+           </div>
         </div>
-        <button onClick={() => setShowImportModal(true)} className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg transition-transform active:scale-95"><Sparkles size={20} /></button>
+        
+        <div className="flex bg-slate-50 dark:bg-slate-800 p-1 rounded-2xl">
+          <button onClick={() => setActiveTab('activity')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all ${activeTab === 'activity' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>Transactions</button>
+          <button onClick={() => setActiveTab('portfolio')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all ${activeTab === 'portfolio' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>Assets & Debts</button>
+        </div>
+
+        {isSearchOpen && (
+          <div className="mt-2 animate-kick">
+            <input autoFocus type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Filter entries..." className="w-full bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-xl text-[10px] font-bold outline-none dark:text-white" />
+          </div>
+        )}
       </div>
 
-      <div className="space-y-0">
-        {combinedRecords.length === 0 ? (
-          <div className="text-center py-12 bg-white dark:bg-slate-800/50 rounded-[24px] border-2 border-dashed border-slate-100 dark:border-slate-800 transition-colors">
-            <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest">No matching records</p>
+      <div className="mt-2">
+        {filteredRecords.length === 0 ? (
+          <div className="text-center py-20 bg-slate-50/20 rounded-3xl border border-dashed border-slate-100 dark:border-slate-800">
+            <p className="text-slate-400 font-black text-[9px] uppercase tracking-widest">No matching entries</p>
           </div>
         ) : (
-          combinedRecords.map((rec) => (
+          filteredRecords.map((rec) => (
             <SwipeableItem 
               key={rec.id} 
-              item={rec} 
-              isIncome={rec.recordType === 'income'} 
+              item={rec as any} 
+              recordType={rec.recordType} 
               currencySymbol={currencySymbol} 
-              onDelete={rec.recordType === 'income' ? onDeleteIncome : onDeleteExpense} 
+              onDelete={rec.recordType === 'income' ? onDeleteIncome : rec.recordType === 'wealth' ? onDeleteWealth : onDeleteExpense} 
               onEdit={onEditRecord}
-              onUpdateExpense={onUpdateExpense}
-              suggestions={rec.recordType === 'expense' ? subCategorySuggestions[(rec as Expense).category] : []}
             />
           ))
         )}
       </div>
 
       {showImportModal && (
-        <div className="fixed inset-0 bg-black/60 z-[60] flex items-end justify-center backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-[32px] animate-slide-up shadow-2xl p-1">
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-[32px] animate-slide-up shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
              <div className="flex justify-between items-center px-6 py-4 border-b dark:border-slate-800">
-               <h3 className="text-sm font-black dark:text-white uppercase tracking-wider">Import Records</h3>
-               <button onClick={() => setShowImportModal(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400"><X size={16} /></button>
+                <div className="flex items-center gap-2">
+                   <div className="bg-indigo-50 dark:bg-indigo-900/30 p-2 rounded-xl text-indigo-600"><Sparkles size={18} /></div>
+                   <h3 className="text-sm font-black uppercase dark:text-white tracking-widest">Batch AI Import</h3>
+                </div>
+                <button onClick={() => setShowImportModal(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400"><X size={18} /></button>
              </div>
-             <div className="p-6 space-y-4">
-               <textarea
-                 value={importText}
-                 onChange={(e) => setImportText(e.target.value)}
-                 placeholder="Paste SMS/text logs here..."
-                 className="w-full h-40 bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl text-xs font-medium dark:text-white resize-none outline-none border dark:border-slate-700"
-               />
-               <button
-                 onClick={handleBulkImport}
-                 disabled={!importText || isAnalyzing}
-                 className="w-full bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-2 transition-all uppercase tracking-widest text-xs"
-               >
-                 {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-                 {isAnalyzing ? 'Analyzing...' : 'Process Import'}
-               </button>
+
+             <div className="p-1.5 bg-slate-50 dark:bg-slate-800/50 flex gap-1 border-b dark:border-slate-800">
+                <button onClick={() => setImportSource('text')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${importSource === 'text' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>
+                  <MessageSquare size={12} /> Paste Text
+                </button>
+                <button onClick={() => setImportSource('file')} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${importSource === 'file' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>
+                  <FileUp size={12} /> Upload CSV
+                </button>
+             </div>
+             
+             <div className="p-6 flex-1 overflow-y-auto no-scrollbar space-y-6">
+                {importSource === 'text' ? (
+                  <div className="space-y-4">
+                    <textarea 
+                      value={importText} 
+                      onChange={(e) => setImportText(e.target.value)} 
+                      placeholder="Paste SMS messages, bank alerts, or transaction logs here..." 
+                      className="w-full h-64 bg-slate-50 dark:bg-slate-800 p-4 rounded-3xl text-xs font-medium outline-none border border-slate-100 dark:border-slate-700 focus:border-indigo-500 dark:text-white resize-none" 
+                    />
+                    <div className="flex gap-2">
+                       <button onClick={async () => {
+                         try { const text = await navigator.clipboard.readText(); setImportText(text); } catch(e) { alert("Clipboard access denied."); }
+                       }} className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
+                         <ClipboardPaste size={14} /> Paste
+                       </button>
+                       <button onClick={() => setImportText('')} className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-500 rounded-2xl"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-12 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-[32px] flex flex-col items-center justify-center text-center space-y-4">
+                    <div className="bg-indigo-50 dark:bg-indigo-900/20 p-5 rounded-full text-indigo-600"><FileText size={32} /></div>
+                    <div>
+                       <p className="text-xs font-black text-slate-900 dark:text-white uppercase">Upload SMS Export</p>
+                       <p className="text-[10px] font-bold text-slate-400 mt-1">Supports standard CSV formats</p>
+                    </div>
+                    <input type="file" accept=".csv" ref={fileInputRef} className="hidden" onChange={handleFileChange} />
+                    <button onClick={() => fileInputRef.current?.click()} className="px-6 py-2.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-lg active:scale-95 transition-all">Select File</button>
+                  </div>
+                )}
+
+                <button 
+                  onClick={() => handleBatchImport(importText)} 
+                  disabled={!importText || isAnalyzing} 
+                  className="w-full bg-slate-900 dark:bg-indigo-600 text-white font-black py-5 rounded-3xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-all text-xs uppercase tracking-widest disabled:opacity-50"
+                >
+                  {isAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <><Sparkles size={18} /> Run AI Extraction</>}
+                </button>
+                
+                <p className="text-[9px] font-bold text-slate-400 text-center uppercase tracking-widest opacity-60">AI processes in batches for accuracy</p>
              </div>
           </div>
         </div>

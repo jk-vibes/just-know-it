@@ -1,12 +1,12 @@
 
 import React, { useState } from 'react';
-import { UserSettings, UserProfile } from '../types';
+import { UserSettings, UserProfile, AppTheme, Category } from '../types';
 import { SUPPORTED_CURRENCIES } from '../constants';
 import { 
-  User, LogOut, Shield, Bell, HelpCircle, 
+  LogOut, Shield, Bell, HelpCircle, 
   ChevronRight, Calculator, Moon, Sun, 
-  Cloud, RefreshCw, Smartphone, Coins, Trash2, Check, Database, Eraser, Filter,
-  History, ShieldCheck, ExternalLink
+  Cloud, RefreshCw, Coins, Trash2, Check, Database, Eraser,
+  History, Shield as ShieldIcon, Edit3, X, Palette
 } from 'lucide-react';
 
 interface SettingsProps {
@@ -15,8 +15,11 @@ interface SettingsProps {
   onLogout: () => void;
   onReset: () => void;
   onToggleTheme: () => void;
+  onUpdateAppTheme: (theme: AppTheme) => void;
   onUpdateCurrency: (code: string) => void;
   onUpdateDataFilter: (filter: 'all' | 'user' | 'mock') => void;
+  onUpdateSplit: (split: UserSettings['split']) => void;
+  onUpdateBaseIncome: (income: number) => void;
   onSync: () => void;
   isSyncing: boolean;
   onLoadMockData: () => void;
@@ -29,8 +32,11 @@ const Settings: React.FC<SettingsProps> = ({
   onLogout, 
   onReset, 
   onToggleTheme, 
+  onUpdateAppTheme,
   onUpdateCurrency, 
   onUpdateDataFilter,
+  onUpdateSplit,
+  onUpdateBaseIncome,
   onSync, 
   isSyncing,
   onLoadMockData,
@@ -38,6 +44,9 @@ const Settings: React.FC<SettingsProps> = ({
 }) => {
   const isDark = settings.theme === 'dark';
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
+  const [showSplitModal, setShowSplitModal] = useState(false);
+  const [tempSplit, setTempSplit] = useState(settings.split);
+  const [tempIncome, setTempIncome] = useState(settings.monthlyIncome);
 
   const currentCurrency = SUPPORTED_CURRENCIES.find(c => c.code === settings.currency) || SUPPORTED_CURRENCIES[0];
 
@@ -45,21 +54,84 @@ const Settings: React.FC<SettingsProps> = ({
     ? new Date(settings.lastSynced).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : 'Never';
 
+  const themes: { id: AppTheme | 'Vibrant', label: string, icon: React.ReactNode }[] = [
+    { 
+      id: 'Standard', 
+      label: 'Standard', 
+      icon: <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="18" height="18" rx="4" /></svg> 
+    },
+    { 
+      id: 'Vibrant', 
+      label: 'Vibrant', 
+      icon: <Palette size={18} strokeWidth={2.5} /> 
+    },
+    { 
+      id: 'Spiderman', 
+      label: 'Spidey', 
+      icon: (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M12 2L4.5 9V15L12 22L19.5 15V9L12 2ZM12 4.5L17.5 9.5H15L12 6.5L9 9.5H6.5L12 4.5ZM7 11V13.5L12 18.5L17 13.5V11H7Z" />
+        </svg>
+      ) 
+    },
+    { 
+      id: 'CaptainAmerica', 
+      label: 'Cap', 
+      icon: <ShieldIcon size={18} strokeWidth={2.5} /> 
+    },
+    { 
+      id: 'Naruto', 
+      label: 'Naruto', 
+      icon: (
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 12C12 12 15 11 15 8C15 5 12 5 12 5C12 5 9 5 9 8C9 11 12 12 12 12Z" />
+          <path d="M12 12C12 12 11 15 8 15C5 15 5 12 5 12C5 12 5 9 8 9C11 9 12 12 12 12Z" />
+        </svg>
+      ) 
+    }
+  ];
+
+  const handleUpdateTempSplit = (cat: Category, val: number) => {
+    const categories = ['Needs', 'Wants', 'Savings'] as const;
+    const others = categories.filter(c => c !== cat);
+    const remaining = 100 - val;
+    const splitRest = remaining / 2;
+    setTempSplit({
+      ...tempSplit,
+      [cat]: val,
+      [others[0]]: Math.round(splitRest),
+      [others[1]]: 100 - val - Math.round(splitRest),
+    });
+  };
+
+  const saveSplitSettings = () => {
+    onUpdateSplit(tempSplit);
+    onUpdateBaseIncome(tempIncome);
+    setShowSplitModal(false);
+  };
+
   return (
     <div className="pb-32 pt-6 space-y-6 dark:text-slate-100">
       
-      {/* Profile Header */}
-      <div className="flex items-center gap-4 bg-white dark:bg-slate-800 p-5 rounded-[32px] border border-slate-50 dark:border-slate-800 shadow-sm">
-        <div className="relative">
-          <img src={user?.avatar} alt="User" className="w-14 h-14 rounded-2xl bg-slate-100 border-2 border-white dark:border-slate-700" />
-          <div className="absolute -bottom-1 -right-1 bg-green-500 w-4 h-4 rounded-full border-2 border-white dark:border-slate-800"></div>
-        </div>
-        <div className="flex-1">
-          <h2 className="text-lg font-black text-slate-900 dark:text-white leading-tight">{user?.name}</h2>
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{user?.email}</p>
-        </div>
-        <div className="bg-indigo-50 dark:bg-indigo-950 p-2 rounded-xl text-indigo-600 dark:text-indigo-400">
-          <ShieldCheck size={20} />
+      {/* Theme Selection */}
+      <div className="space-y-3">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Experience Theme</h3>
+        <div className="bg-slate-50 dark:bg-slate-800/40 p-1.5 rounded-[28px] flex overflow-x-auto no-scrollbar gap-1 border border-slate-100 dark:border-slate-800 shadow-sm">
+          {themes.map(t => (
+            <button
+              key={t.id}
+              onClick={() => onUpdateAppTheme(t.id as AppTheme)}
+              className={`flex-none min-w-[70px] flex flex-col items-center gap-1.5 py-3 rounded-2xl transition-all ${
+                settings.appTheme === t.id 
+                  ? 'bg-gradient-to-br from-brand-primary to-brand-secondary text-white shadow-lg scale-[1.05]' 
+                  : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80'
+              }`}
+            >
+              {t.icon}
+              <span className="text-[8px] font-black uppercase tracking-widest">{t.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -86,67 +158,71 @@ const Settings: React.FC<SettingsProps> = ({
         </button>
       </div>
 
-      {/* Cloud Status Card */}
-      <div className="bg-slate-50 dark:bg-slate-800/40 p-5 rounded-[32px] border border-slate-100 dark:border-slate-800 space-y-4">
-        <div className="flex justify-between items-center">
+      {/* Cloud Status Card with Gradient */}
+      <div className="bg-gradient-to-br from-slate-50 to-white dark:from-slate-800/40 dark:to-slate-900 p-5 rounded-[32px] border border-slate-100 dark:border-slate-800 space-y-4 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-brand-primary/5 blur-3xl rounded-full -mr-16 -mt-16"></div>
+        <div className="flex justify-between items-center relative z-10">
           <div className="flex items-center gap-2">
-            <History size={16} className="text-indigo-600 dark:text-indigo-400" />
+            <History size={16} className="text-brand-primary" />
             <h3 className="text-[10px] font-black text-slate-900 dark:text-white uppercase tracking-widest">Storage Status</h3>
           </div>
-          <span className="text-[9px] font-black text-emerald-500 uppercase bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-lg tracking-widest">Connected</span>
+          <span className="text-[9px] font-black text-emerald-500 uppercase bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-lg tracking-widest border border-emerald-100 dark:border-emerald-900">Connected</span>
         </div>
         
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between relative z-10">
           <div className="flex flex-col">
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Google Drive Backup</span>
             <span className="text-xs font-black text-slate-900 dark:text-white mt-1">{lastSyncedDate}</span>
           </div>
           <div className="flex flex-col items-end">
              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Auto-Sync</span>
-             <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 mt-1 uppercase tracking-tighter">Enabled</span>
+             <span className="text-[10px] font-black text-brand-primary dark:text-indigo-400 mt-1 uppercase tracking-tighter">Enabled</span>
           </div>
-        </div>
-
-        <div className="pt-2">
-           <button 
-             onClick={onSync}
-             disabled={isSyncing}
-             className="w-full bg-white dark:bg-slate-700 p-3 rounded-2xl text-[10px] font-black text-[#163074] dark:text-white uppercase tracking-widest border border-slate-200 dark:border-slate-600 active:scale-95 transition-all flex items-center justify-center gap-2"
-           >
-             <Cloud size={14} /> {isSyncing ? 'Processing...' : 'Force Cloud Sync'}
-           </button>
         </div>
       </div>
 
-      {/* Target Allocation Card */}
-      <div className="bg-[#163074] rounded-[32px] p-6 text-white shadow-xl relative overflow-hidden">
-        <div className="flex items-center gap-3 mb-4">
-          <Calculator size={18} className="text-indigo-200" />
-          <h3 className="font-extrabold text-sm uppercase tracking-wider">Target Allocation</h3>
+      {/* Target Allocation Card with Deep Gradient */}
+      <div className="bg-gradient-to-br from-brand-primary to-brand-secondary rounded-[32px] p-6 text-white shadow-xl relative overflow-hidden transition-colors">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
+        <div className="flex items-center justify-between mb-4 relative z-10">
+          <div className="flex items-center gap-3">
+            <Calculator size={18} className="opacity-70" />
+            <h3 className="font-extrabold text-sm uppercase tracking-wider">Target Allocation</h3>
+          </div>
+          <button 
+            onClick={() => setShowSplitModal(true)}
+            className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-colors backdrop-blur-sm"
+          >
+            <Edit3 size={16} />
+          </button>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 relative z-10">
           {Object.entries(settings.split).map(([cat, val]) => (
-            <div key={cat} className="flex-1 text-center bg-white/10 rounded-2xl py-3 border border-white/10">
-              <p className="text-[9px] font-black uppercase text-indigo-200 mb-1">{cat}</p>
+            <div key={cat} className="flex-1 text-center bg-white/10 rounded-2xl py-3 border border-white/10 backdrop-blur-sm shadow-inner">
+              <p className="text-[9px] font-black uppercase opacity-70 mb-1">{cat}</p>
               <div className="text-xl font-black">
                 {val}<span className="text-xs opacity-70 ml-0.5">%</span>
               </div>
             </div>
           ))}
         </div>
+        <div className="mt-4 pt-4 border-t border-white/10 flex justify-between items-center relative z-10">
+          <span className="text-[10px] font-black uppercase opacity-60 tracking-widest">Base Monthly Expected</span>
+          <span className="text-sm font-black">{currentCurrency.symbol}{settings.monthlyIncome.toLocaleString()}</span>
+        </div>
       </div>
 
       {/* Data Source Switcher */}
       <div className="space-y-3">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Data Source</h3>
-        <div className="bg-slate-100 dark:bg-slate-800/50 p-1 rounded-2xl flex border border-slate-100 dark:border-slate-800">
+        <div className="bg-slate-100 dark:bg-slate-800/50 p-1 rounded-2xl flex border border-slate-100 dark:border-slate-800 shadow-inner">
           {(['all', 'user', 'mock'] as const).map((filter) => (
             <button
               key={filter}
               onClick={() => onUpdateDataFilter(filter)}
               className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all ${
                 settings.dataFilter === filter 
-                  ? 'bg-white dark:bg-slate-700 text-[#163074] dark:text-white shadow-sm' 
+                  ? 'bg-gradient-to-br from-brand-primary to-brand-secondary text-white shadow-md' 
                   : 'text-slate-400 dark:text-slate-500 hover:bg-white/50 dark:hover:bg-slate-700/50'
               }`}
             >
@@ -154,158 +230,92 @@ const Settings: React.FC<SettingsProps> = ({
             </button>
           ))}
         </div>
-        <p className="text-[9px] text-slate-400 font-bold px-2 italic uppercase">
-          Currently showing: <span className="text-indigo-500">{settings.dataFilter === 'all' ? 'Combined History' : settings.dataFilter === 'mock' ? 'Demo Samples Only' : 'Your Actual Entries'}</span>
-        </p>
       </div>
 
       <div className="space-y-3">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">App Preferences</h3>
-        
         <div className="bg-white dark:bg-slate-800 rounded-[32px] overflow-hidden shadow-sm border border-slate-50 dark:border-slate-800">
-          <button 
-            onClick={() => setShowCurrencyModal(true)}
-            className="w-full flex items-center justify-between p-4 active:bg-slate-50 dark:active:bg-slate-900/50 transition-colors border-b border-slate-100 dark:border-slate-700/50"
-          >
+          <button onClick={() => setShowCurrencyModal(true)} className="w-full flex items-center justify-between p-4 active:bg-slate-50 dark:active:bg-slate-900/50 transition-colors border-b dark:border-slate-700/50">
             <div className="flex items-center gap-3">
-              <div className="bg-red-50 dark:bg-red-900/20 p-2.5 rounded-2xl text-[#f14444]">
-                <Coins size={18} />
-              </div>
+              <div className="bg-red-50 dark:bg-red-900/20 p-2.5 rounded-2xl text-brand-accent"><Coins size={18} /></div>
               <div className="text-left">
                 <p className="font-black text-slate-900 dark:text-white text-xs">Currency</p>
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{currentCurrency.name}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-               <span className="text-[11px] font-black text-[#163074] dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-lg">{settings.currency}</span>
+               <span className="text-[11px] font-black text-brand-primary dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded-lg">{settings.currency}</span>
                <ChevronRight className="text-slate-300" size={16} />
             </div>
           </button>
-
-          <button 
-            onClick={onLoadMockData}
-            className="w-full flex items-center justify-between p-4 active:bg-slate-50 dark:active:bg-slate-900/50 transition-colors border-b border-slate-100 dark:border-slate-700/50"
-          >
+          <button onClick={() => onLoadMockData()} className="w-full flex items-center justify-between p-4 active:bg-slate-50 dark:active:bg-slate-900/50 transition-colors border-b dark:border-slate-700/50">
             <div className="flex items-center gap-3">
-              <div className="bg-indigo-50 dark:bg-indigo-900/20 p-2.5 rounded-2xl text-indigo-500">
-                <Database size={18} />
-              </div>
+              <div className="bg-indigo-50 dark:bg-indigo-900/20 p-2.5 rounded-2xl text-indigo-500"><Database size={18} /></div>
               <div className="text-left">
-                <p className="font-black text-slate-900 dark:text-white text-xs">Load Demo Data</p>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Populate 3 months history</p>
+                <p className="font-black text-slate-900 dark:text-white text-xs">Mock Data</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Populate 6 months history</p>
               </div>
             </div>
             <ChevronRight className="text-slate-300" size={16} />
           </button>
-
-          <button 
-            onClick={onClearExpenses}
-            className="w-full flex items-center justify-between p-4 active:bg-slate-50 dark:active:bg-slate-900/50 transition-colors"
-          >
+          <button onClick={() => onClearExpenses()} className="w-full flex items-center justify-between p-4 active:bg-slate-50 dark:active:bg-slate-900/50 transition-colors">
             <div className="flex items-center gap-3">
-              <div className="bg-amber-50 dark:bg-amber-900/20 p-2.5 rounded-2xl text-amber-500">
-                <Eraser size={18} />
-              </div>
-              <div className="text-left">
-                <p className="font-black text-slate-900 dark:text-white text-xs">Purge History</p>
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Clear all transactions</p>
-              </div>
+              <div className="bg-amber-50 dark:bg-amber-900/20 p-2.5 rounded-2xl text-amber-500"><Eraser size={18} /></div>
+              <div className="text-left"><p className="font-black text-slate-900 dark:text-white text-xs">Purge History</p><p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Clear all transactions</p></div>
             </div>
             <ChevronRight className="text-slate-300" size={16} />
           </button>
         </div>
-
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2 pt-2">Account & Support</h3>
-        <div className="bg-white dark:bg-slate-800 rounded-[32px] overflow-hidden shadow-sm border border-slate-50 dark:border-slate-800">
-          {[
-            { icon: Shield, label: 'Security & Privacy', color: 'text-slate-400' },
-            { icon: Bell, label: 'Notifications', color: 'text-slate-400' },
-            { icon: HelpCircle, label: 'Help Center', color: 'text-slate-400' },
-          ].map((item, idx, arr) => (
-            <button 
-              key={item.label}
-              className={`w-full flex items-center justify-between p-4 active:bg-slate-50 dark:active:bg-slate-900/50 transition-colors ${idx !== arr.length - 1 ? 'border-b border-slate-100 dark:border-slate-700/50' : ''}`}
-            >
-              <div className="flex items-center gap-3">
-                <item.icon size={18} className={item.color} />
-                <p className="font-black text-slate-900 dark:text-white text-xs">{item.label}</p>
-              </div>
-              <ChevronRight className="text-slate-300" size={16} />
-            </button>
-          ))}
-        </div>
       </div>
 
-      <div className="space-y-3 pt-2">
-        <button 
-          onClick={onLogout}
-          className="w-full flex items-center justify-center gap-2 p-4 text-[#163074] dark:text-indigo-400 font-black bg-indigo-50 dark:bg-indigo-900/20 rounded-[28px] text-xs uppercase tracking-widest transition-all active:scale-95"
-        >
-          <LogOut size={16} />
-          Sign Out
-        </button>
-        
-        <button 
-          onClick={onReset}
-          className="w-full flex items-center justify-center gap-2 p-4 text-rose-500 font-black bg-rose-50 dark:bg-rose-900/20 rounded-[28px] border border-rose-100 dark:border-rose-900/30 text-xs uppercase tracking-widest transition-all active:scale-95"
-        >
-          <Trash2 size={16} />
-          Wipe App Data
-        </button>
-      </div>
-
-      <div className="text-center pt-2 pb-8">
-        <span className="text-[9px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-[0.2em]">
-          Just Know It • v1.1
-        </span>
-      </div>
-
-      {showCurrencyModal && (
+      {/* Split Modal with Gradient Header */}
+      {showSplitModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center p-0 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-t-[40px] animate-slide-up shadow-2xl border-t border-white/10">
-            <div className="flex justify-between items-center px-8 py-6 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-base font-black text-[#163074] dark:text-white uppercase tracking-tight">Currency</h3>
-              <button onClick={() => setShowCurrencyModal(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400">
-                <ChevronRight size={20} className="rotate-90" />
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-t-[40px] animate-slide-up shadow-2xl border-t border-white/10 p-6 space-y-8">
+            <div className="flex justify-between items-center bg-gradient-to-r from-transparent via-slate-50/50 dark:via-slate-800/20 to-transparent py-2 rounded-2xl px-2">
+              <h3 className="text-base font-black text-brand-primary dark:text-white uppercase tracking-tight">Adjust Allocation</h3>
+              <button onClick={() => setShowSplitModal(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 shadow-inner">
+                <X size={18} />
               </button>
             </div>
-            <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto no-scrollbar">
-              {SUPPORTED_CURRENCIES.map(curr => (
-                <button
-                  key={curr.code}
-                  onClick={() => {
-                    onUpdateCurrency(curr.code);
-                    setShowCurrencyModal(false);
-                  }}
-                  className={`w-full flex items-center justify-between p-4 rounded-[28px] transition-all ${
-                    settings.currency === curr.code 
-                      ? 'bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-100 dark:border-indigo-800' 
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800 border border-transparent'
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-lg ${
-                      settings.currency === curr.code ? 'bg-[#f14444] text-white shadow-lg shadow-red-200 dark:shadow-none' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-                    }`}>
-                      {curr.symbol}
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest block">Base Expected Income</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-slate-300">{currentCurrency.symbol}</span>
+                  <input type="number" value={tempIncome} onChange={(e) => setTempIncome(Number(e.target.value))} className="w-full bg-slate-50 dark:bg-slate-800 pl-10 pr-4 py-4 rounded-2xl text-xl font-black outline-none border border-transparent focus:border-brand-primary dark:text-white shadow-inner" />
+                </div>
+              </div>
+              <div className="space-y-6">
+                {(['Needs', 'Wants', 'Savings'] as const).map(cat => (
+                  <div key={cat} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{cat}</span>
+                      <span className="text-sm font-black text-brand-primary dark:text-white">{tempSplit[cat]}%</span>
                     </div>
-                    <div className="text-left">
-                      <p className={`font-black text-sm ${settings.currency === curr.code ? 'text-[#163074] dark:text-white' : 'text-slate-900 dark:text-slate-200'}`}>
-                        {curr.code}
-                      </p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{curr.name}</p>
-                    </div>
+                    <input type="range" min="0" max="100" value={tempSplit[cat]} onChange={(e) => handleUpdateTempSplit(cat, Number(e.target.value))} className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer accent-brand-primary" />
                   </div>
-                  {settings.currency === curr.code && <div className="w-6 h-6 bg-[#f14444] rounded-full flex items-center justify-center text-white"><Check size={14} strokeWidth={4} /></div>}
+                ))}
+              </div>
+              <div className="pt-4">
+                <button onClick={saveSplitSettings} className="w-full bg-gradient-to-r from-brand-primary to-brand-secondary text-white font-black py-5 rounded-[28px] flex items-center justify-center gap-2 shadow-xl uppercase tracking-widest text-xs">
+                  Save Budget Rule <Check size={18} strokeWidth={3} />
                 </button>
-              ))}
-            </div>
-            <div className="p-6 bg-slate-50 dark:bg-slate-800/50 text-center">
-               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Selected currency updates all views</p>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Logout/Reset buttons */}
+      <div className="space-y-3 pt-2">
+        <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 p-4 text-brand-primary dark:text-indigo-400 font-black bg-indigo-50 dark:bg-indigo-900/20 rounded-[28px] text-xs uppercase tracking-widest transition-all active:scale-95 border border-indigo-100/50 dark:border-indigo-900/50 shadow-sm">
+          <LogOut size={16} /> Sign Out
+        </button>
+        <button onClick={onReset} className="w-full flex items-center justify-center gap-2 p-4 text-rose-500 font-black bg-rose-50 dark:bg-rose-900/20 rounded-[28px] border border-rose-100 dark:border-rose-900/30 text-xs uppercase tracking-widest transition-all active:scale-95 shadow-sm">
+          <Trash2 size={16} /> Wipe App Data
+        </button>
+      </div>
     </div>
   );
 };

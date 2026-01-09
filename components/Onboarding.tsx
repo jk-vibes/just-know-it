@@ -1,114 +1,72 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { UserSettings } from '../types';
-import { DEFAULT_SPLIT } from '../constants';
-import { ArrowRight, Wallet } from 'lucide-react';
+import { ArrowRight, Wallet, Sparkles, ShieldCheck } from 'lucide-react';
 
 interface OnboardingProps {
-  onComplete: (settings: UserSettings) => void;
+  onComplete: (settings: Partial<UserSettings>) => void;
 }
 
 const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
-  const [step, setStep] = useState(1);
-  const [income, setIncome] = useState<number>(0);
-  const [split, setSplit] = useState(DEFAULT_SPLIT);
-
   const handleFinish = () => {
-    onComplete({
-      monthlyIncome: income,
-      split,
-      isOnboarded: true,
-      theme: 'light',
-      isCloudSyncEnabled: true,
-      currency: 'INR'
-    });
+    // Pass empty object or defaults, App.tsx will merge with INITIAL_SETTINGS
+    onComplete({});
   };
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 flex flex-col items-center justify-center p-6 text-slate-900 dark:text-white text-center transition-colors">
-      {step === 1 && (
-        <div className="w-full max-w-md animate-slide-up">
-          <div className="bg-indigo-50 dark:bg-white/10 p-4 rounded-full w-20 h-20 mx-auto mb-8 flex items-center justify-center text-[#163074] dark:text-white">
-            <Wallet size={40} />
+      <div className="w-full max-w-md animate-slide-up space-y-8">
+        {/* Brand Icon */}
+        <div className="relative inline-block">
+          <div className="bg-brand-primary/10 dark:bg-white/10 p-6 rounded-[32px] w-24 h-24 mx-auto flex items-center justify-center text-brand-primary dark:text-white transition-colors">
+            <Wallet size={48} strokeWidth={1.5} />
           </div>
-          <h1 className="text-3xl font-black mb-4">Just Know It</h1>
-          <p className="text-slate-500 dark:text-indigo-100 mb-8 text-lg font-bold">Simple, rule-based tracking to master your money.</p>
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 text-slate-900 dark:text-white shadow-2xl border border-slate-100 dark:border-slate-700">
-            <label className="block text-sm font-black text-slate-400 dark:text-slate-500 mb-2 uppercase tracking-wider text-left">Monthly Net Income</label>
-            <div className="relative mb-6">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-300 dark:text-slate-600">₹</span>
-              <input
-                type="number"
-                value={income || ''}
-                onChange={(e) => setIncome(Number(e.target.value))}
-                placeholder="0.00"
-                className="w-full pl-10 pr-4 py-4 text-3xl font-black border-2 border-slate-100 dark:border-slate-700 rounded-2xl focus:border-[#163074] dark:focus:border-indigo-500 outline-none transition-all dark:bg-slate-900 text-slate-900 dark:text-white"
-              />
-            </div>
-            <button
-              disabled={!income}
-              onClick={() => setStep(2)}
-              className="w-full bg-[#163074] dark:bg-indigo-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-50 transition-all uppercase tracking-widest text-xs"
-            >
-              Continue <ArrowRight size={20} />
-            </button>
+          <div className="absolute -top-2 -right-2 bg-brand-accent text-white p-2 rounded-full shadow-lg">
+            <Sparkles size={16} />
           </div>
         </div>
-      )}
 
-      {step === 2 && (
-        <div className="w-full max-w-md animate-slide-up">
-          <h1 className="text-2xl font-black mb-6">Set Your Rule</h1>
-          <p className="text-slate-500 dark:text-indigo-100 mb-8 font-bold">We recommend the 50/30/20 rule, but you can adjust it.</p>
-          
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 text-slate-900 dark:text-white shadow-2xl border border-slate-100 dark:border-slate-700 space-y-6">
-            <div className="space-y-4">
-              {Object.entries(split).map(([category, value]) => (
-                <div key={category}>
-                  <div className="flex justify-between mb-2">
-                    <span className="font-black text-xs uppercase tracking-widest text-slate-400">{category}</span>
-                    <span className="font-black text-[#163074] dark:text-indigo-400">{value}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={value}
-                    onChange={(e) => {
-                      const newVal = Number(e.target.value);
-                      const others = Object.keys(split).filter(k => k !== category);
-                      const remaining = 100 - newVal;
-                      const splitRest = remaining / 2;
-                      setSplit({
-                        ...split,
-                        [category]: newVal,
-                        [others[0]]: Math.round(splitRest),
-                        [others[1]]: Math.round(splitRest),
-                      } as any);
-                    }}
-                    className="w-full h-2 bg-slate-100 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-[#163074] dark:accent-indigo-600"
-                  />
-                </div>
-              ))}
-            </div>
-            
-            <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl">
-              <div className="flex justify-between text-xs text-slate-400 font-black uppercase tracking-widest">
-                <span>Total Budget</span>
-                <span className={Object.values(split).reduce((a: number, b: number) => a + b, 0) === 100 ? 'text-green-600' : 'text-[#f14444] font-black'}>
-                  {Object.values(split).reduce((a: number, b: number) => a + b, 0)}%
-                </span>
+        <div>
+          <h1 className="text-4xl font-black mb-3 tracking-tight">Just Keep It</h1>
+          <p className="text-slate-500 dark:text-slate-400 text-lg font-bold leading-tight max-w-[280px] mx-auto">
+            Your premium AI companion for rule-based wealth tracking.
+          </p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 rounded-[40px] p-8 shadow-2xl border border-slate-100 dark:border-slate-700 space-y-6">
+          <div className="space-y-4 text-left">
+            <div className="flex items-start gap-4">
+              <div className="bg-emerald-50 dark:bg-emerald-900/30 p-2 rounded-xl text-emerald-600">
+                <ShieldCheck size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider">Cloud Secured</h3>
+                <p className="text-[11px] font-bold text-slate-400 leading-normal mt-0.5 uppercase tracking-tight">Automatic Google Drive backups keep your data private and safe.</p>
               </div>
             </div>
-
-            <button
-              onClick={handleFinish}
-              className="w-full bg-[#163074] dark:bg-indigo-600 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 hover:opacity-90 transition-all uppercase tracking-widest text-xs"
-            >
-              Start Budgeting <ArrowRight size={20} />
-            </button>
+            
+            <div className="flex items-start gap-4">
+              <div className="bg-indigo-50 dark:bg-indigo-900/30 p-2 rounded-xl text-indigo-600">
+                <Sparkles size={20} />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-wider">AI Powered</h3>
+                <p className="text-[11px] font-bold text-slate-400 leading-normal mt-0.5 uppercase tracking-tight">Smart categorization handles the boring stuff for you instantly.</p>
+              </div>
+            </div>
           </div>
+
+          <button
+            onClick={handleFinish}
+            className="w-full bg-brand-primary text-white font-black py-5 rounded-[28px] flex items-center justify-center gap-3 shadow-xl hover:scale-[1.02] active:scale-95 transition-all uppercase tracking-widest text-xs"
+          >
+            Get Started <ArrowRight size={20} />
+          </button>
+          
+          <p className="text-[9px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em]">
+            No complex setup • Just tracking
+          </p>
         </div>
-      )}
+      </div>
     </div>
   );
 };

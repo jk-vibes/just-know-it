@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
-  <title>Just Know It - Premium Budget Tracker</title>
+  <title>Just Keep It - Premium Budget Tracker</title>
   <link rel="manifest" href="/manifest.json">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -21,6 +22,7 @@
               secondary: 'var(--brand-secondary)',
               accent: 'var(--brand-accent)',
               bg: 'var(--brand-bg)',
+              glow: 'var(--brand-glow)',
             }
           },
           fontFamily: {
@@ -30,6 +32,14 @@
             'kick': 'fadeIn 0.3s ease-out forwards',
             'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
             'bounce-slow': 'bounce 3s infinite',
+            'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'float': 'float 6s ease-in-out infinite',
+          },
+          keyframes: {
+            float: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-10px)' },
+            }
           }
         }
       }
@@ -38,36 +48,45 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
-      --brand-primary: #163074;
-      --brand-secondary: #0f172a;
-      --brand-accent: #f14444;
-      --brand-bg: #F5F5F5;
+      --brand-primary: #3b82f6;
+      --brand-secondary: #1e3a8a;
+      --brand-accent: #f43f5e;
+      --brand-bg: #f8fafc;
+      --brand-glow: rgba(59, 130, 246, 0.3);
       --bg-light: #ffffff;
-      --bg-dark: #0f172a;
+      --bg-dark: #020617;
     }
     
-    /* Spiderman Theme */
     [data-theme='Spiderman'] {
-      --brand-primary: #DF1F2D;
-      --brand-secondary: #B11313;
-      --brand-accent: #2B3784;
-      --brand-bg: #F5F5F5;
+      --brand-primary: #e11d48;
+      --brand-secondary: #9f1239;
+      --brand-accent: #2563eb;
+      --brand-bg: #fff1f2;
+      --brand-glow: rgba(225, 29, 72, 0.4);
     }
 
-    /* Captain America Theme */
     [data-theme='CaptainAmerica'] {
-      --brand-primary: #162CA2;
-      --brand-secondary: #B22234;
-      --brand-accent: #EC2004;
-      --brand-bg: #FFFFFF;
+      --brand-primary: #0369a1;
+      --brand-secondary: #0c4a6e;
+      --brand-accent: #dc2626;
+      --brand-bg: #f0f9ff;
+      --brand-glow: rgba(3, 105, 161, 0.4);
     }
 
-    /* Naruto Theme */
     [data-theme='Naruto'] {
-      --brand-primary: #F66C2D;
-      --brand-secondary: #E7E419;
-      --brand-accent: #363641;
-      --brand-bg: #F0EBDF;
+      --brand-primary: #f97316;
+      --brand-secondary: #9a3412;
+      --brand-accent: #facc15;
+      --brand-bg: #fff7ed;
+      --brand-glow: rgba(249, 115, 22, 0.4);
+    }
+
+    [data-theme='Vibrant'] {
+      --brand-primary: #8b5cf6;
+      --brand-secondary: #5b21b6;
+      --brand-accent: #06b6d4;
+      --brand-bg: #f5f3ff;
+      --brand-glow: rgba(139, 92, 246, 0.5);
     }
 
     body {
@@ -96,6 +115,21 @@
       from { opacity: 0; transform: scale(0.98); }
       to { opacity: 1; transform: scale(1); }
     }
+
+    .glass {
+      backdrop-filter: blur(12px);
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .dark .glass {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .neon-glow {
+      box-shadow: 0 0 20px var(--brand-glow);
+    }
   </style>
   <script type="importmap">
 {
@@ -113,7 +147,7 @@
 }
 </script>
 </head>
-<body class="bg-white dark:bg-slate-900 text-slate-900 dark:text-white h-full w-full fixed inset-0 overflow-hidden">
+<body class="bg-brand-bg dark:bg-slate-950 text-slate-900 dark:text-white h-full w-full fixed inset-0 overflow-hidden transition-colors duration-500">
   <div id="root" class="h-full w-full"></div>
 </body>
 </html>

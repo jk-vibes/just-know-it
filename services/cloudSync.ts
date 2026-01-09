@@ -8,6 +8,7 @@
 export interface BackupData {
   expenses: any[];
   incomes: any[];
+  wealthItems: any[];
   rules: any[];
   recurringItems: any[];
   settings: any;
@@ -15,21 +16,15 @@ export interface BackupData {
 }
 
 export async function syncToGoogleDrive(accessToken: string, data: BackupData): Promise<string> {
-  console.log("Initiating Cloud Backup to Google Drive...");
+  console.log("Initiating Cloud Backup to simulation storage...");
   
-  // Simulation delay to mimic network latency
+  // Simulation delay to mimic network latency (important for UX verification)
   await new Promise(resolve => setTimeout(resolve, 2000));
 
   try {
-    // In a real implementation, we would:
-    // 1. Search for 'just_know_it_backup.json' using files.list
-    // 2. If exists, use files.update (PATCH)
-    // 3. If not, use files.create (POST)
-    
-    // For this prototype, we simulate successful persistence
     const lastSynced = new Date().toISOString();
     
-    // We store it in a special local key to simulate the "Cloud" state
+    // Persist to simulation storage (LocalDB simulation for verification)
     localStorage.setItem('jk_cloud_backup_sim', JSON.stringify({
       ...data,
       timestamp: lastSynced
@@ -38,12 +33,12 @@ export async function syncToGoogleDrive(accessToken: string, data: BackupData): 
     return lastSynced;
   } catch (error) {
     console.error("Cloud Sync Error:", error);
-    throw new Error("Failed to sync with Google Drive");
+    throw new Error("Failed to sync with simulated Google Drive");
   }
 }
 
 export async function restoreFromGoogleDrive(accessToken: string): Promise<BackupData | null> {
-  console.log("Checking for remote backups...");
+  console.log("Checking for remote backups in simulation...");
   await new Promise(resolve => setTimeout(resolve, 1500));
 
   const cloudData = localStorage.getItem('jk_cloud_backup_sim');
