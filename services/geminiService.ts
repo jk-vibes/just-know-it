@@ -180,7 +180,16 @@ export async function parseTransactionText(text: string, currency: string): Prom
 }
 
 export async function parseBulkTransactions(text: string, currency: string): Promise<Array<{ amount: number, merchant: string, category: Category, subCategory: string, date: string }>> {
-  const prompt = `Identify all financial expense transactions in: ${text}. Return JSON array of objects with amount, merchant, date, category, subCategory.`;
+  const prompt = `
+    Instructions: Extract all actual financial expense/spending/payment transactions from the following text.
+    Look for keywords like: "Spent Rs.", "Sent Rs.", "PAYMENT ALERT!", "INR ... deducted", "debited", "Rs. ... paid".
+    Ignore: Marketing messages, OTPs, login alerts, balance reminders, and refunded transactions.
+    
+    Source Text: 
+    ${text}
+    
+    Return a JSON array of objects with amount, merchant (extract from "To", "At", "towards"), date (YYYY-MM-DD), category (Needs/Wants/Savings), and subCategory.
+  `;
 
   try {
     // Bulk extraction tasks use gemini-3-flash-preview

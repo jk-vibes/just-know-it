@@ -96,14 +96,24 @@ const App: React.FC = () => {
     root.setAttribute('data-theme', settings.appTheme || 'Standard');
   }, [settings.theme, settings.appTheme]);
 
-  const addNotification = useCallback((notif: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
+  const addNotification = useCallback((notif: Omit<Notification, 'timestamp' | 'read'> & { id?: string }) => {
+    const id = notif.id || Math.random().toString(36).substring(2, 11);
     const newNotif: Notification = {
       ...notif,
-      id: Math.random().toString(36).substring(2, 11),
+      id,
       timestamp: new Date().toISOString(),
       read: false
     };
-    setNotifications(prev => [newNotif, ...prev].slice(0, 50));
+    
+    setNotifications(prev => {
+      const index = prev.findIndex(n => n.id === id);
+      if (index !== -1) {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], ...newNotif };
+        return updated;
+      }
+      return [newNotif, ...prev].slice(0, 50);
+    });
   }, []);
 
   const handleClearNotifications = () => setNotifications([]);
@@ -598,7 +608,7 @@ const App: React.FC = () => {
       {/* Version Log Modal */}
       {isShowingVersionLog && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 backdrop-blur-md bg-black/40">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden border border-white/10 animate-slide-up">
+          <div className="bg-white dark:bg-slate-900 w-full max-sm rounded-[40px] shadow-2xl overflow-hidden border border-white/10 animate-slide-up">
             <div className="p-8 space-y-8">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">

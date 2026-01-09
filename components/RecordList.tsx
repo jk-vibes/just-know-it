@@ -20,8 +20,22 @@ interface RecordListProps {
   viewDate: Date;
   onMonthChange: (direction: number) => void;
   onGoToDate: (year: number, month: number) => void;
-  addNotification: (notif: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
+  addNotification: (notif: Omit<Notification, 'timestamp' | 'read'> & { id?: string }) => void;
 }
+
+const parseCSVRow = (row: string) => {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < row.length; i++) {
+    const char = row[i];
+    if (char === '"') inQuotes = !inQuotes;
+    else if (char === ',' && !inQuotes) { result.push(current); current = ''; }
+    else current += char;
+  }
+  result.push(current);
+  return result;
+};
 
 const SwipeableItem: React.FC<{
   item: Expense | Income | WealthItem;
@@ -132,46 +146,69 @@ const RecordList: React.FC<RecordListProps> = ({
   const handleBatchImport = async (textToProcess: string) => {
     if (!textToProcess.trim()) return;
     
-    // Close modal immediately and clear text
+    const importId = 'batch-import-' + Date.now();
     setShowImportModal(false);
     setImportText('');
-    
-    // Start processing in background
     setIsAnalyzing(true);
     
     addNotification({
+      id: importId,
       type: 'Activity',
       title: 'Import Started',
-      message: 'Processing your transactions in the background. We will notify you when finished.',
+      message: 'Processing your transactions (0%)...',
       severity: 'info'
     });
 
     try {
-      const lines = textToProcess.split('\n').filter(l => l.trim().length > 0);
+      const lines = textToProcess.split('\n').filter(l => l.trim().length > 10);
       let totalImported = 0;
-      const CHUNK_SIZE = 15;
+      const CHUNK_SIZE = 12;
+      const totalChunks = Math.ceil(lines.length / CHUNK_SIZE);
 
       for (let i = 0; i < lines.length; i += CHUNK_SIZE) {
         const chunk = lines.slice(i, i + CHUNK_SIZE).join('\n');
         const chunkResults = await parseBulkTransactions(chunk, settings.currency);
-        if (chunkResults && chunkResults.length > 0) {
+        
+        if (chunkResults && Array.isArray(chunkResults) && chunkResults.length > 0) {
           onAddBulk(chunkResults);
           totalImported += chunkResults.length;
         }
+        
+        const currentChunk = Math.floor(i / CHUNK_SIZE) + 1;
+        const progress = Math.min(100, Math.round((currentChunk / totalChunks) * 100));
+        addNotification({
+          id: importId,
+          type: 'Activity',
+          title: 'Import Progress',
+          message: `Processing your transactions (${progress}%)...`,
+          severity: 'info'
+        });
       }
       
-      addNotification({
-        type: 'Activity',
-        title: 'Import Complete',
-        message: `Successfully processed and added ${totalImported} new transactions.`,
-        severity: 'success'
-      });
+      if (totalImported > 0) {
+        addNotification({
+          id: importId,
+          type: 'Activity',
+          title: 'Import Complete',
+          message: `Successfully processed and added ${totalImported} records.`,
+          severity: 'success'
+        });
+      } else {
+        addNotification({
+          id: importId,
+          type: 'Activity',
+          title: 'Import Result',
+          message: 'No clear financial transactions were found in the text provided.',
+          severity: 'warning'
+        });
+      }
     } catch (err) {
-      console.error("Background import error", err);
+      console.error("Import error", err);
       addNotification({
+        id: importId,
         type: 'Activity',
         title: 'Import Error',
-        message: 'Something went wrong while processing your CSV data.',
+        message: 'The AI encountered an error processing this batch.',
         severity: 'error'
       });
     } finally {
@@ -190,45 +227,45 @@ const RecordList: React.FC<RecordListProps> = ({
       if (rows.length < 2) return;
 
       const headers = rows[0].toLowerCase().split(',');
-      const bodyIdx = headers.findIndex(h => h.includes('body') || h.includes('content') || h.includes('msg') || h.includes('sms'));
+      const bodyIdx = headers.findIndex(h => h.includes('body') || h.includes('content') || h.includes('msg') || h.includes('sms') || h.includes('text'));
       
       if (bodyIdx === -1) {
-        alert("CSV format not recognized. We need a column for message text (e.g., 'body', 'content').");
+        alert("CSV format not recognized. Ensure there is a 'Content' or 'Body' column.");
         return;
       }
 
       const extractedMessages = rows.slice(1)
         .map(row => {
-          const cols = row.split(',');
+          const cols = parseCSVRow(row);
           return cols[bodyIdx]?.trim();
         })
         .filter(msg => {
           if (!msg) return false;
           const m = msg.toLowerCase();
-          return m.includes('spent') || m.includes('debited') || m.includes('credited') || m.includes('salary') || m.includes('paid') || m.includes('upi');
+          return m.includes('spent') || m.includes('debited') || m.includes('credited') || m.includes('salary') || m.includes('paid') || m.includes('upi') || m.includes('rs.') || m.includes('inr');
         })
         .join('\n');
 
       if (!extractedMessages) {
-        alert("No clear financial transactions found in this file.");
+        alert("No transaction-like messages found in this CSV.");
         return;
       }
       
       setImportText(extractedMessages);
-      setImportSource('text'); // Switch to text mode for user review before running AI
+      setImportSource('text');
     };
     reader.readAsText(file);
   };
 
   return (
     <div className="pb-32 pt-1 min-h-full">
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md py-1.5 -mx-4 px-4 border-b border-slate-100 dark:border-slate-800">
+      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md py-1.5 -mx-4 px-4 border-b border-slate-100 dark:border-slate-800 transition-colors">
         <div className="flex items-center justify-between mb-2">
            <h2 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">{activeTab === 'activity' ? monthLabelCompact : 'PORTFOLIO'}</h2>
            <div className="flex items-center gap-1">
-             <button onClick={() => setIsSearchOpen(!isSearchOpen)} className={`p-1.5 rounded-lg ${isSearchOpen ? 'text-indigo-600' : 'text-slate-400'}`}><Search size={16} /></button>
+             <button onClick={() => setIsSearchOpen(!isSearchOpen)} className={`p-1.5 rounded-lg ${isSearchOpen ? 'text-brand-primary' : 'text-slate-400'}`}><Search size={16} /></button>
              {activeTab === 'activity' && (
-               <button onClick={() => setShowImportModal(true)} className="p-1.5 text-slate-400 hover:text-indigo-600 relative">
+               <button onClick={() => setShowImportModal(true)} className="p-1.5 text-slate-400 hover:text-brand-primary relative">
                  <Sparkles size={16} />
                  {isAnalyzing && (
                    <span className="absolute top-0 right-0 w-2 h-2 bg-indigo-500 rounded-full animate-pulse border border-white dark:border-slate-900"></span>
@@ -238,9 +275,9 @@ const RecordList: React.FC<RecordListProps> = ({
            </div>
         </div>
         
-        <div className="flex bg-slate-50 dark:bg-slate-800 p-1 rounded-2xl">
-          <button onClick={() => setActiveTab('activity')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all ${activeTab === 'activity' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>Transactions</button>
-          <button onClick={() => setActiveTab('portfolio')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all ${activeTab === 'portfolio' ? 'bg-white dark:bg-slate-700 text-indigo-600 shadow-sm' : 'text-slate-400'}`}>Assets & Debts</button>
+        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <button onClick={() => setActiveTab('activity')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all ${activeTab === 'activity' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}>Transactions</button>
+          <button onClick={() => setActiveTab('portfolio')} className={`flex-1 py-2 text-[9px] font-black uppercase tracking-wider rounded-lg transition-all ${activeTab === 'portfolio' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}>Assets & Debts</button>
         </div>
 
         {isSearchOpen && (
@@ -252,7 +289,7 @@ const RecordList: React.FC<RecordListProps> = ({
 
       <div className="mt-2">
         {filteredRecords.length === 0 ? (
-          <div className="text-center py-20 bg-slate-50/20 rounded-3xl border border-dashed border-slate-100 dark:border-slate-800">
+          <div className="text-center py-20 bg-slate-50/20 rounded-2xl border border-dashed border-slate-100 dark:border-slate-800">
             <p className="text-slate-400 font-black text-[9px] uppercase tracking-widest">No matching entries</p>
           </div>
         ) : (
@@ -296,7 +333,7 @@ const RecordList: React.FC<RecordListProps> = ({
                       value={importText} 
                       onChange={(e) => setImportText(e.target.value)} 
                       placeholder="Paste SMS messages, bank alerts, or transaction logs here..." 
-                      className="w-full h-64 bg-slate-50 dark:bg-slate-800 p-4 rounded-3xl text-xs font-medium outline-none border border-slate-100 dark:border-slate-700 focus:border-indigo-500 dark:text-white resize-none" 
+                      className="w-full h-64 bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl text-xs font-medium outline-none border border-slate-100 dark:border-slate-700 focus:border-indigo-500 dark:text-white resize-none transition-colors" 
                     />
                     <div className="flex gap-2">
                        <button onClick={async () => {
@@ -308,7 +345,7 @@ const RecordList: React.FC<RecordListProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="py-12 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-[32px] flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="py-12 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center space-y-4">
                     <div className="bg-indigo-50 dark:bg-indigo-900/20 p-5 rounded-full text-indigo-600"><FileText size={32} /></div>
                     <div>
                        <p className="text-xs font-black text-slate-900 dark:text-white uppercase">Upload SMS Export</p>
