@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { View, Expense, BudgetRule, UserSettings, Category, UserProfile, Frequency, RecurringItem, Income, IncomeType, AppTheme, Notification, WealthItem, WealthType, WealthCategory, DensityLevel, BudgetItem } from './types';
 import Dashboard from './components/Dashboard';
@@ -205,24 +204,26 @@ const App: React.FC = () => {
   const handleLoadMockData = () => {
     triggerHaptic(30);
     const { newExpenses, newIncomes, newWealth } = generateMockData();
-    setExpenses(newExpenses);
-    setIncomes(newIncomes);
-    setWealthItems(newWealth);
+    setExpenses(prev => [...prev, ...newExpenses]);
+    setIncomes(prev => [...prev, ...newIncomes]);
+    setWealthItems(prev => [...prev, ...newWealth]);
     
     // Default initial budget items with subcategories
-    setBudgetItems([
-      { id: 'b1', name: 'Rent & Maintenance', amount: 65000, category: 'Needs', subCategory: 'Rent/Mortgage' },
-      { id: 'b2', name: 'Groceries & Household', amount: 18000, category: 'Needs', subCategory: 'Groceries' },
-      { id: 'b3', name: 'Utilities & Bills', amount: 8000, category: 'Needs', subCategory: 'Utilities' },
-      { id: 'b4', name: 'School Fees', amount: 25000, category: 'Needs', subCategory: 'Education' },
-      { id: 'b5', name: 'Leisure & Dining', amount: 20000, category: 'Wants', subCategory: 'Dining' },
-      { id: 'b6', name: 'Subscriptions', amount: 5000, category: 'Wants', subCategory: 'Subscription' },
-      { id: 'b7', name: 'SIP Investment', amount: 50000, category: 'Savings', subCategory: 'SIP/Mutual Fund' },
-      { id: 'b8', name: 'Emergency Buffer', amount: 20000, category: 'Savings', subCategory: 'Emergency Fund' }
+    setBudgetItems(prev => [
+      ...prev,
+      { id: 'b1', name: 'Rent & Maintenance', amount: 65000, category: 'Needs', subCategory: 'Rent/Mortgage', isMock: true },
+      { id: 'b2', name: 'Groceries & Household', amount: 18000, category: 'Needs', subCategory: 'Groceries', isMock: true },
+      { id: 'b3', name: 'Utilities & Bills', amount: 8000, category: 'Needs', subCategory: 'Utilities', isMock: true },
+      { id: 'b4', name: 'School Fees', amount: 25000, category: 'Needs', subCategory: 'Education', isMock: true },
+      { id: 'b5', name: 'Leisure & Dining', amount: 20000, category: 'Wants', subCategory: 'Dining', isMock: true },
+      { id: 'b6', name: 'Subscriptions', amount: 5000, category: 'Wants', subCategory: 'Subscription', isMock: true },
+      { id: 'b7', name: 'SIP Investment', amount: 50000, category: 'Savings', subCategory: 'SIP/Mutual Fund', isMock: true },
+      { id: 'b8', name: 'Emergency Buffer', amount: 20000, category: 'Savings', subCategory: 'Emergency Fund', isMock: true }
     ]);
 
     // Add default recurring items
-    setRecurringItems([
+    setRecurringItems(prev => [
+      ...prev,
       {
         id: 'rec1',
         amount: 65000,
@@ -231,7 +232,8 @@ const App: React.FC = () => {
         note: 'Monthly Rent',
         merchant: 'Skyline Properties',
         frequency: 'Monthly',
-        nextDueDate: '2025-02-05'
+        nextDueDate: '2025-02-05',
+        isMock: true
       },
       {
         id: 'rec2',
@@ -241,7 +243,8 @@ const App: React.FC = () => {
         note: 'Equity SIP',
         merchant: 'Groww',
         frequency: 'Monthly',
-        nextDueDate: '2025-02-07'
+        nextDueDate: '2025-02-07',
+        isMock: true
       },
       {
         id: 'rec3',
@@ -251,7 +254,8 @@ const App: React.FC = () => {
         note: 'Netflix Premium',
         merchant: 'Netflix',
         frequency: 'Monthly',
-        nextDueDate: '2025-02-12'
+        nextDueDate: '2025-02-12',
+        isMock: true
       }
     ]);
 
@@ -263,6 +267,21 @@ const App: React.FC = () => {
     });
     
     setCurrentView('Dashboard');
+  };
+
+  const handlePurgeMockData = () => {
+    triggerHaptic(20);
+    setExpenses(prev => prev.filter(e => !e.isMock));
+    setIncomes(prev => prev.filter(i => !i.isMock));
+    setWealthItems(prev => prev.filter(w => !w.isMock));
+    setBudgetItems(prev => prev.filter(b => !b.isMock));
+    setRecurringItems(prev => prev.filter(r => !r.isMock));
+    addNotification({
+      type: 'Activity',
+      title: 'Demo Data Purged',
+      message: 'All sample records have been removed. Your personal data remains intact.',
+      severity: 'info'
+    });
   };
 
   useEffect(() => {
@@ -500,7 +519,7 @@ const App: React.FC = () => {
           {currentView === 'Budget' && <BudgetPlanner budgetItems={budgetItems} recurringItems={recurringItems} expenses={expenses} settings={settings} onAddBudget={handleAddBudget} onDeleteBudget={handleDeleteBudget} viewDate={viewDate} />}
           {currentView === 'Accounts' && <Accounts wealthItems={wealthItems} settings={settings} onUpdateWealth={handleUpdateWealth} onDeleteWealth={handleDeleteWealth} onAddWealth={handleAddWealth} />}
           {currentView === 'Transactions' && <Transactions expenses={expenses} incomes={incomes} wealthItems={wealthItems} settings={settings} onDeleteExpense={handleDeleteExpense} onDeleteIncome={handleDeleteIncome} onDeleteWealth={handleDeleteWealth} onConfirm={(id, cat) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, category: cat, isConfirmed: true } : e))} onUpdateExpense={handleUpdateExpense} onEditRecord={(r) => { triggerHaptic(); setRecordToEdit(r); setIsAddingRecord(true); }} onAddBulk={(n) => setExpenses(p => [...p, ...n.map(x => ({ ...x, id: Math.random().toString(36).substring(2, 11), isConfirmed: true }))])} viewDate={viewDate} onMonthChange={(d) => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + d, 1))} onGoToDate={(y, m) => setViewDate(new Date(y, m, 1))} addNotification={addNotification} />}
-          {currentView === 'Profile' && <Settings settings={settings} user={user} onLogout={handleLogout} onReset={() => { triggerHaptic(30); localStorage.removeItem(STORAGE_KEY); location.reload();}} onToggleTheme={() => { triggerHaptic(); setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' })); }} onUpdateAppTheme={(t) => { triggerHaptic(); setSettings(s => ({ ...s, appTheme: t })); }} onUpdateCurrency={(c) => setSettings(s => ({ ...s, currency: c }))} onUpdateDataFilter={(f) => { triggerHaptic(); setSettings(s => ({ ...s, dataFilter: f })); }} onUpdateSplit={(split) => setSettings(s => ({ ...s, split }))} onUpdateBaseIncome={(income) => setSettings(s => ({ ...s, monthlyIncome: Math.round(income) }))} onSync={handleCloudSync} onExport={() => {}} onImport={() => {}} isSyncing={isSyncing} onLoadMockData={handleLoadMockData} onClearExpenses={() => { triggerHaptic(20); setExpenses([]); setRecurringItems([]); addNotification({ type: 'Activity', title: 'History Flushed', message: 'Transaction history has been permanently cleared.', severity: 'warning' }); }} />}
+          {currentView === 'Profile' && <Settings settings={settings} user={user} onLogout={handleLogout} onReset={() => { triggerHaptic(30); localStorage.removeItem(STORAGE_KEY); location.reload();}} onToggleTheme={() => { triggerHaptic(); setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' })); }} onUpdateAppTheme={(t) => { triggerHaptic(); setSettings(s => ({ ...s, appTheme: t })); }} onUpdateCurrency={(c) => setSettings(s => ({ ...s, currency: c }))} onUpdateDataFilter={(f) => { triggerHaptic(); setSettings(s => ({ ...s, dataFilter: f })); }} onUpdateSplit={(split) => setSettings(s => ({ ...s, split }))} onUpdateBaseIncome={(income) => setSettings(s => ({ ...s, monthlyIncome: Math.round(income) }))} onSync={handleCloudSync} onExport={() => {}} onImport={() => {}} isSyncing={isSyncing} onLoadMockData={handleLoadMockData} onPurgeMockData={handlePurgeMockData} onClearExpenses={() => { triggerHaptic(20); setExpenses([]); setRecurringItems([]); addNotification({ type: 'Activity', title: 'History Flushed', message: 'Transaction history has been permanently cleared.', severity: 'warning' }); }} />}
         </div>
       </main>
 

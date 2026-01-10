@@ -1,11 +1,10 @@
-
 import React, { useState, useRef } from 'react';
 import { UserSettings, UserProfile, AppTheme, Category } from '../types';
 import { SUPPORTED_CURRENCIES } from '../constants';
 import { 
   LogOut, ChevronRight, Calculator, Moon, Sun, 
   Cloud, RefreshCw, Coins, Database, Eraser,
-  Edit3, X, Download, Check, Upload, Layout, ShieldAlert, Palette, Zap
+  Edit3, X, Download, Check, Upload, Layout, ShieldAlert, Palette, Zap, Trash
 } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 
@@ -25,12 +24,13 @@ interface SettingsProps {
   onImport: (file: File) => void;
   isSyncing: boolean;
   onLoadMockData: () => void;
+  onPurgeMockData: () => void;
   onClearExpenses: () => void;
 }
 
 const Settings: React.FC<SettingsProps> = ({ 
   settings, user, onLogout, onReset, onToggleTheme, onUpdateAppTheme, onUpdateCurrency, 
-  onUpdateSplit, onUpdateBaseIncome, onSync, onExport, onImport, isSyncing, onLoadMockData, onClearExpenses
+  onUpdateSplit, onUpdateBaseIncome, onSync, onExport, onImport, isSyncing, onLoadMockData, onPurgeMockData, onClearExpenses
 }) => {
   const isDark = settings.theme === 'dark';
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -143,7 +143,7 @@ const Settings: React.FC<SettingsProps> = ({
                 <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Export</span>
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button onClick={handleImportClick} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 active:scale-95 transition-all">
                 <Upload size={14} className="text-slate-400" />
                 <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Import</span>
@@ -151,6 +151,10 @@ const Settings: React.FC<SettingsProps> = ({
               <button onClick={() => { triggerHaptic(); onLoadMockData(); }} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 active:scale-95 transition-all">
                 <Zap size={14} className="text-amber-500" />
                 <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Sample</span>
+              </button>
+              <button onClick={() => { triggerHaptic(); onPurgeMockData(); }} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 active:scale-95 transition-all">
+                <Trash size={14} className="text-slate-400" />
+                <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Purge</span>
               </button>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv" className="hidden" />
             </div>
@@ -160,7 +164,7 @@ const Settings: React.FC<SettingsProps> = ({
         <section className="mb-12 space-y-2">
           <button onClick={() => { triggerHaptic(20); onClearExpenses(); }} className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-rose-50/50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/20 text-rose-500 active:scale-95 transition-all">
             <Eraser size={14} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Flush Transaction History</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Flush User History</span>
           </button>
           <button onClick={onReset} className="w-full flex items-center justify-center gap-2 py-3 text-slate-400 dark:text-slate-600 hover:text-rose-500 transition-colors active:scale-95">
             <ShieldAlert size={12} />

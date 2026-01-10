@@ -18,6 +18,7 @@ export interface BudgetItem {
   category: Category;
   subCategory?: string;
   isRecurringLink?: string; // Links to a recurringItem id if it's a fixed expense
+  isMock?: boolean;
 }
 
 export interface Expense {
@@ -70,6 +71,7 @@ export interface RecurringItem {
   merchant?: string;
   frequency: Frequency;
   nextDueDate: string;
+  isMock?: boolean;
 }
 
 export interface Notification {
