@@ -1,18 +1,20 @@
-
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, 
-  AreaChart, Area, XAxis, YAxis, Tooltip, 
-  BarChart, Bar
+  AreaChart, Area, XAxis, YAxis, BarChart, Bar,
+  Tooltip, Legend
 } from 'recharts';
 import { Expense, UserSettings, Category, Income, WealthItem, UserProfile } from '../types';
 import { CATEGORY_COLORS, getCurrencySymbol } from '../constants';
 import { 
-  TrendingUp, Wallet, Loader2, Activity, PieChart as PieChartIcon, 
-  Sparkles, BrainCircuit, ShieldCheck, Target, Zap, CreditCard,
-  Briefcase, BarChart3, ArrowDownRight, ArrowUpRight
+  TrendingUp, Activity, PieChart as PieChartIcon, 
+  Sparkles, ShieldCheck, Zap, 
+  Loader2, RefreshCcw, 
+  Target, BarChart3, ListOrdered, 
+  Clock, Flame, Droplets, ArrowRight, CalendarDays
 } from 'lucide-react';
-import { getBudgetInsights, getDecisionAdvice } from '../services/geminiService';
+import { getBudgetInsights, getExpensesHash } from '../services/geminiService';
+import { triggerHaptic } from '../utils/haptics';
 
 interface DashboardProps {
   expenses: Expense[];
@@ -30,397 +32,370 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  expenses, incomes, wealthItems, settings, viewDate, onMonthChange, onInsightsReceived
+  expenses, incomes, wealthItems, settings, viewDate, onInsightsReceived
 }) => {
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [insights, setInsights] = useState<{ tip: string, impact: string }[] | null>(null);
-  const [decisionType, setDecisionType] = useState<'Vacation' | 'BigPurchase'>('Vacation');
-  const [estimatedCost, setEstimatedCost] = useState('');
-  const [isConsultingAI, setIsConsultingAI] = useState(false);
-  const [decisionAdvice, setDecisionAdvice] = useState<any | null>(null);
-
+  const [insightError, setInsightError] = useState(false);
+  
+  const initialFetchRef = useRef(false);
+  const lastHashRef = useRef<string>("");
   const currencySymbol = getCurrencySymbol(settings.currency);
 
+  const triggerInsightsFetch = async (force = false) => {
+    if (force) triggerHaptic();
+    const currentHash = getExpensesHash(expenses, settings);
+    if (!force && currentHash === lastHashRef.current && insights) return;
+    setLoadingInsights(true);
+    setInsightError(false);
+    try {
+      const results = await getBudgetInsights(expenses, settings);
+      if (results && results.length > 0) {
+        setInsights(results);
+        lastHashRef.current = currentHash;
+        if (onInsightsReceived) onInsightsReceived(results);
+      } else { setInsightError(true); }
+    } catch (err) { setInsightError(true); }
+    finally { setLoadingInsights(false); }
+  };
+
   useEffect(() => {
-    const fetchInsights = async () => {
-      setLoadingInsights(true);
-      try {
-        const results = await getBudgetInsights(expenses, settings);
-        if (results) {
-          setInsights(results);
-          if (onInsightsReceived) onInsightsReceived(results);
-        }
-      } catch (err) {
-        console.error("Failed to fetch dashboard insights", err);
-      } finally {
-        setLoadingInsights(false);
-      }
-    };
-    fetchInsights();
-  }, [expenses, settings, onInsightsReceived]);
+    if (!initialFetchRef.current) {
+      initialFetchRef.current = true;
+      const timer = setTimeout(() => triggerInsightsFetch(), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
   
   const wealthStats = useMemo(() => {
     const assets = wealthItems.filter(i => i.type === 'Investment').reduce((sum, i) => sum + i.value, 0);
     const liabilities = wealthItems.filter(i => i.type === 'Liability').reduce((sum, i) => sum + i.value, 0);
-    return { assets, liabilities, netWorth: assets - liabilities };
+    const liquid = wealthItems.filter(i => ['Checking Account', 'Savings Account', 'Cash'].includes(i.category)).reduce((sum, i) => sum + i.value, 0);
+    return { assets: Math.round(assets), liabilities: Math.round(liabilities), netWorth: Math.round(assets - liabilities), liquid: Math.round(liquid) };
   }, [wealthItems]);
 
   const stats = useMemo(() => {
     const m = viewDate.getMonth();
     const y = viewDate.getFullYear();
-    
-    // Get last month context
-    const lastM = m === 0 ? 11 : m - 1;
-    const lastY = m === 0 ? y - 1 : y;
-
     const currentExps = expenses.filter(e => e.isConfirmed && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y);
-    const lastMonthExps = expenses.filter(e => e.isConfirmed && new Date(e.date).getMonth() === lastM && new Date(e.date).getFullYear() === lastY);
-
     const spent = currentExps.reduce((sum, e) => sum + e.amount, 0);
-    const lastSpent = lastMonthExps.reduce((sum, e) => sum + e.amount, 0);
+    const monthlyIncomes = incomes.filter(i => new Date(i.date).getMonth() === m && new Date(i.date).getFullYear() === y);
+    const totalIncome = monthlyIncomes.reduce((sum, i) => sum + i.amount, 0) || settings.monthlyIncome;
+    const byCat = currentExps.reduce((acc, e) => { acc[e.category] = (acc[e.category] || 0) + e.amount; return acc; }, {} as Record<Category, number>);
     
-    const income = incomes.filter(i => new Date(i.date).getMonth() === m && new Date(i.date).getFullYear() === y)
-                          .reduce((sum, i) => sum + i.amount, 0) || settings.monthlyIncome;
-    
-    const byCat = currentExps.reduce((acc, e) => {
+    // Efficiency Metrics
+    const savingsRate = totalIncome > 0 ? Math.round(((totalIncome - spent) / totalIncome) * 100) : 0;
+    const today = new Date();
+    const isCurrentMonth = today.getMonth() === m && today.getFullYear() === y;
+    const dayOfMonth = isCurrentMonth ? today.getDate() : new Date(y, m + 1, 0).getDate();
+    const dailyAvg = Math.round(spent / dayOfMonth);
+    const burnDays = dailyAvg > 0 ? Math.round(wealthStats.liquid / dailyAvg) : Infinity;
+
+    // Top Merchants
+    const merchantMap = currentExps.reduce((acc, e) => {
+      const name = e.merchant || e.note || 'General';
+      acc[name] = (acc[name] || 0) + e.amount;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const topMerchants = (Object.entries(merchantMap) as [string, number][])
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 4)
+      .map(([name, amount]) => ({ name, amount: Math.round(amount) }));
+
+    return { spent: Math.round(spent), income: Math.round(totalIncome), byCat, savingsRate, dailyAvg, burnDays, topMerchants };
+  }, [expenses, incomes, settings.monthlyIncome, viewDate, wealthStats.liquid]);
+
+  const ytdStats = useMemo(() => {
+    const currentYear = viewDate.getFullYear();
+    const currentMonthLimit = viewDate.getMonth();
+    const yearExps = expenses.filter(e => {
+      const d = new Date(e.date);
+      return e.isConfirmed && d.getFullYear() === currentYear && d.getMonth() <= currentMonthLimit;
+    });
+
+    const total = yearExps.reduce((sum, e) => sum + e.amount, 0);
+    const countMonths = currentMonthLimit + 1;
+    const monthlyAvg = total / countMonths;
+
+    const byCat = yearExps.reduce((acc, e) => {
       acc[e.category] = (acc[e.category] || 0) + e.amount;
       return acc;
     }, {} as Record<Category, number>);
 
-    // Variance percentage
-    const variance = lastSpent > 0 ? ((spent - lastSpent) / lastSpent) * 100 : 0;
+    return { total: Math.round(total), monthlyAvg: Math.round(monthlyAvg), byCat };
+  }, [expenses, viewDate]);
 
-    return { spent, lastSpent, income, byCat, variance };
-  }, [expenses, incomes, settings.monthlyIncome, viewDate]);
+  const weeklyData = useMemo(() => {
+    const m = viewDate.getMonth();
+    const y = viewDate.getFullYear();
+    const currentExps = expenses.filter(e => e.isConfirmed && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y);
+    
+    const weeks: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    currentExps.forEach(e => {
+      const d = new Date(e.date).getDate();
+      const w = Math.ceil(d / 7);
+      weeks[w] = (weeks[w] || 0) + e.amount;
+    });
+
+    return Object.entries(weeks).map(([week, amount]) => ({ week: `W${week}`, amount: Math.round(amount) }));
+  }, [expenses, viewDate]);
 
   const velocityData = useMemo(() => {
     const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
     const data = [];
     let cumulativeSpent = 0;
     const dailyIncome = stats.income / daysInMonth;
-
     for (let i = 1; i <= daysInMonth; i++) {
-      const daySpent = expenses
-        .filter(e => e.isConfirmed && new Date(e.date).getDate() === i && new Date(e.date).getMonth() === viewDate.getMonth())
-        .reduce((sum, e) => sum + e.amount, 0);
-      
+      const daySpent = expenses.filter(e => e.isConfirmed && new Date(e.date).getDate() === i && new Date(e.date).getMonth() === viewDate.getMonth()).reduce((sum, e) => sum + e.amount, 0);
       cumulativeSpent += daySpent;
-      data.push({
-        day: i,
-        spent: cumulativeSpent,
-        budget: dailyIncome * i,
-      });
+      data.push({ day: i, Actual: Math.round(cumulativeSpent), Budget: Math.round(dailyIncome * i) });
     }
     return data;
   }, [expenses, viewDate, stats.income]);
 
-  const comparisonData = [
-    { name: 'Last Month', amount: stats.lastSpent, fill: '#cbd5e1' },
-    { name: 'This Month', amount: stats.spent, fill: 'var(--brand-primary)' }
-  ];
-
-  const handleConsultAI = async () => {
-    if (!estimatedCost || isConsultingAI) return;
-    setIsConsultingAI(true);
-    const advice = await getDecisionAdvice(expenses, settings, decisionType, parseFloat(estimatedCost));
-    setDecisionAdvice(advice);
-    setIsConsultingAI(false);
-  };
-
   const pieData = useMemo(() => [
-    { name: 'Needs', value: stats.byCat.Needs || 0, color: CATEGORY_COLORS.Needs },
-    { name: 'Wants', value: stats.byCat.Wants || 0, color: CATEGORY_COLORS.Wants },
-    { name: 'Savings', value: stats.byCat.Savings || 0, color: CATEGORY_COLORS.Savings },
+    { name: 'Needs', value: Math.round(stats.byCat.Needs || 0), color: CATEGORY_COLORS.Needs },
+    { name: 'Wants', value: Math.round(stats.byCat.Wants || 0), color: CATEGORY_COLORS.Wants },
+    { name: 'Savings', value: Math.round(stats.byCat.Savings || 0), color: CATEGORY_COLORS.Savings },
   ].filter(d => d.value > 0), [stats]);
 
+  const density = settings.density || 'Compact';
+  const itemPadding = density === 'Compact' ? 'p-3' : 'p-5';
+  const sectionClass = `bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl mb-1 shadow-sm ${itemPadding}`;
+
   return (
-    <div className="pb-32 pt-2 space-y-4">
+    <div className="pb-32 pt-1">
+      <div className="bg-gradient-to-r from-brand-primary to-brand-secondary px-5 py-4 rounded-2xl mb-1 shadow-md">
+        <div className="flex justify-between items-center w-full">
+          <div>
+            <h1 className="text-sm font-black text-white tracking-tighter uppercase leading-none">Dashboard</h1>
+            <p className="text-[7px] font-black text-white/50 uppercase tracking-[0.2em] mt-1">Real-time Intelligence</p>
+          </div>
+          <button onClick={() => triggerInsightsFetch(true)} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white backdrop-blur-md transition-all active:scale-90">
+            {loadingInsights ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+          </button>
+        </div>
+      </div>
       
-      {/* 1. PREMIUM NET WORTH CARD */}
-      <div className="relative group px-0">
-        <div className="absolute inset-0 bg-gradient-to-br from-brand-primary via-brand-accent to-purple-600 rounded-2xl blur-3xl opacity-20 transition-opacity duration-700"></div>
-        <div className="relative bg-slate-900 dark:bg-slate-950 p-4 rounded-2xl shadow-xl overflow-hidden border border-white/10">
-          <div className="absolute -top-24 -right-24 w-80 h-80 bg-brand-primary/10 rounded-full blur-[100px] animate-pulse-slow"></div>
-          
-          <div className="relative z-10 flex flex-col gap-4">
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-white/10 rounded-xl backdrop-blur-2xl border border-white/20 text-brand-accent">
-                  <ShieldCheck size={20} />
-                </div>
-                <div>
-                  <p className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none mb-1">Portfolio Net Worth</p>
-                  <h2 className="text-3xl font-black text-white tracking-tighter flex items-baseline gap-1">
-                    <span className="text-lg text-brand-primary/80">{currencySymbol}</span>
-                    {wealthStats.netWorth.toLocaleString()}
-                  </h2>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30">
-                <TrendingUp size={10} className="text-emerald-400" />
-                <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">Growth</span>
-              </div>
+      <div>
+        <div className="grid grid-cols-2 gap-2 mb-1">
+          <section className={`${sectionClass} !mb-0`}>
+            <div className="flex items-center gap-1.5 mb-1.5">
+               <div className="p-1 bg-brand-primary/10 rounded-lg text-brand-primary"><Flame size={10} /></div>
+               <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Burn Rate</p>
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-md">
-                <div className="flex items-center gap-2 mb-1">
-                  <Briefcase size={12} className="text-emerald-400" />
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Assets</span>
-                </div>
-                <p className="text-base font-black text-white">{currencySymbol}{wealthStats.assets.toLocaleString()}</p>
-              </div>
-              <div className="p-3 bg-white/5 rounded-xl border border-white/10 backdrop-blur-md">
-                <div className="flex items-center gap-2 mb-1">
-                  <CreditCard size={12} className="text-rose-500" />
-                  <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Debts</span>
-                </div>
-                <p className="text-base font-black text-white">{currencySymbol}{wealthStats.liabilities.toLocaleString()}</p>
-              </div>
+            <h4 className="text-lg font-black text-slate-900 dark:text-white tracking-tighter">{stats.burnDays === Infinity ? '∞' : stats.burnDays} <span className="text-[10px] opacity-40 uppercase">Days</span></h4>
+            <p className="text-[7px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">Liquid cash runway</p>
+          </section>
+          <section className={`${sectionClass} !mb-0`}>
+            <div className="flex items-center gap-1.5 mb-1.5">
+               <div className="p-1 bg-emerald-500/10 rounded-lg text-emerald-500"><Droplets size={10} /></div>
+               <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Efficiency</p>
             </div>
-          </div>
+            <h4 className="text-lg font-black text-slate-900 dark:text-white tracking-tighter">{stats.savingsRate}% <span className="text-[10px] opacity-40 uppercase">Safe</span></h4>
+            <p className="text-[7px] font-bold text-slate-400 uppercase tracking-tight mt-0.5">Current Savings Rate</p>
+          </section>
         </div>
-      </div>
 
-      {/* 2. CASH FLOW VELOCITY & COMPARISON */}
-      <div className="grid grid-cols-1 gap-4">
-        {/* Burn Velocity */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-md space-y-4">
-          <div className="flex justify-between items-center px-1">
+        <section className={sectionClass}>
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarDays size={12} className="text-brand-accent" />
+            <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Year-to-Date Performance ({viewDate.getFullYear()})</h3>
+          </div>
+          <div className="flex justify-between items-end mb-4">
             <div>
-              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Burn Velocity</h3>
-              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Trajectory vs income</p>
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Cumulative Outflow</p>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter leading-none">
+                <span className="text-sm opacity-40 mr-1">{currencySymbol}</span>
+                {ytdStats.total.toLocaleString()}
+              </h2>
             </div>
-            <div className="p-2 bg-brand-primary/10 dark:bg-brand-primary/20 rounded-xl text-brand-primary">
-              <Activity size={16} />
-            </div>
-          </div>
-          
-          <div className="h-48 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={velocityData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorSpent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="var(--brand-primary)" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="var(--brand-primary)" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 8, fontWeight: 800, fill: '#94a3b8'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 8, fontWeight: 800, fill: '#94a3b8'}} />
-                <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 20px -5px rgba(0,0,0,0.1)', padding: '10px', fontWeight: 800, backgroundColor: 'rgba(255,255,255,0.95)' }}
-                  labelStyle={{ color: 'var(--brand-secondary)', marginBottom: '4px', fontSize: '10px' }}
-                  itemStyle={{ fontSize: '9px' }}
-                />
-                <Area type="monotone" dataKey="spent" stroke="var(--brand-primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorSpent)" animationDuration={1800} />
-                <Area type="monotone" dataKey="budget" stroke="#e2e8f0" strokeDasharray="6 6" fillOpacity={0} strokeWidth={1.5} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center shadow-sm text-brand-primary">
-                <Target size={14} />
-              </div>
-              <div>
-                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Target</p>
-                <p className="text-[11px] font-black text-slate-900 dark:text-white">{currencySymbol}{stats.income.toLocaleString()}</p>
-              </div>
-            </div>
-            <div className="bg-emerald-50 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/30 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white dark:bg-emerald-900/20 flex items-center justify-center shadow-sm text-emerald-500">
-                <Zap size={14} />
-              </div>
-              <div>
-                <p className="text-[7px] font-black text-emerald-500 uppercase tracking-widest">Safe</p>
-                <p className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">{currencySymbol}{(stats.income - stats.spent).toLocaleString()}</p>
-              </div>
+            <div className="text-right">
+              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Monthly Average</p>
+              <p className="text-xs font-black text-slate-600 dark:text-slate-400">{currencySymbol}{ytdStats.monthlyAvg.toLocaleString()}</p>
             </div>
           </div>
-        </div>
-
-        {/* Month Comparison Card */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-md space-y-4">
-          <div className="flex justify-between items-center px-1">
-            <div>
-              <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Benchmark</h3>
-              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">vs previous month</p>
-            </div>
-            <div className={`px-2 py-1 rounded-lg flex items-center gap-1 ${stats.variance <= 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20' : 'bg-rose-50 text-rose-600 dark:bg-rose-900/20'}`}>
-              {stats.variance <= 0 ? <ArrowDownRight size={10} /> : <ArrowUpRight size={10} />}
-              <span className="text-[10px] font-black">{Math.abs(Math.round(stats.variance))}%</span>
-            </div>
+          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full flex overflow-hidden">
+            {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => {
+              const val = ytdStats.byCat[cat] || 0;
+              const perc = ytdStats.total > 0 ? (val / ytdStats.total) * 100 : 0;
+              return perc > 0 ? (
+                <div key={cat} style={{ width: `${perc}%`, backgroundColor: CATEGORY_COLORS[cat] }} />
+              ) : null;
+            })}
           </div>
-
-          <div className="h-40 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={comparisonData} margin={{ top: 10, right: 10, left: -30, bottom: 0 }}>
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 8, fontWeight: 800, fill: '#94a3b8'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 8, fontWeight: 800, fill: '#94a3b8'}} />
-                <Tooltip 
-                  cursor={{fill: 'transparent'}}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 20px -5px rgba(0,0,0,0.1)', padding: '10px', fontWeight: 800, backgroundColor: 'rgba(255,255,255,0.95)' }}
-                />
-                <Bar dataKey="amount" radius={[6, 6, 0, 0]} barSize={32}>
-                  {comparisonData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          
-          <div className="flex justify-between items-center px-1 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
-             <div className="flex flex-col">
-                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Difference</span>
-                <span className={`text-xs font-black ${stats.spent < stats.lastSpent ? 'text-emerald-500' : 'text-slate-900 dark:text-white'}`}>
-                  {currencySymbol}{Math.abs(stats.spent - stats.lastSpent).toLocaleString()}
-                </span>
-             </div>
-             <div className="p-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg text-brand-primary">
-                <BarChart3 size={14} />
-             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. ALLOCATION & AI LAB */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Allocation Donut */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-md flex flex-col items-center">
-          <div className="w-full flex justify-between items-center mb-3 px-1">
-            <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-widest">Allocation</h3>
-            <div className="p-1.5 bg-brand-accent/10 rounded-lg text-brand-accent">
-              <PieChartIcon size={14} />
-            </div>
-          </div>
-          
-          <div className="h-40 w-full relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie 
-                  data={pieData.length > 0 ? pieData : [{name: 'Empty', value: 1, color: '#f1f5f9'}]} 
-                  cx="50%" cy="50%" 
-                  innerRadius={50} outerRadius={65} 
-                  paddingAngle={8} dataKey="value" 
-                  cornerRadius={6} stroke="none"
-                >
-                  {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-2xl font-black text-slate-900 dark:text-white">
-                {Math.round((stats.spent / (stats.income || 1)) * 100)}%
-              </span>
-              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Use</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-1.5 w-full mt-4 bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl">
-            {['Needs', 'Wants', 'Savings'].map(cat => (
-              <div key={cat} className="flex flex-col items-center">
-                <div className="w-2 h-2 rounded-full mb-1 shadow-sm" style={{ backgroundColor: CATEGORY_COLORS[cat as Category] }} />
-                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{cat}</span>
-                <span className="text-[9px] font-black text-slate-900 dark:text-white">{currencySymbol}{Math.round(stats.byCat[cat as Category] || 0).toLocaleString()}</span>
+          <div className="flex gap-4 mt-2">
+            {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
+              <div key={cat} className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
+                <span className="text-[7px] font-black text-slate-400 uppercase tracking-tight">{cat}</span>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* AI Decision Lab */}
-        <div className="bg-gradient-to-br from-[#2563eb] via-[#8b5cf6] to-[#d946ef] p-4 rounded-2xl shadow-xl relative overflow-hidden text-white group">
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10"></div>
-          
-          <div className="relative z-10 flex flex-col h-full justify-between">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-white/20 p-2 rounded-xl backdrop-blur-3xl border border-white/30 shadow-xl">
-                <Zap size={18} className="text-yellow-300 animate-pulse" />
+        <section className={sectionClass}>
+          <div className="flex justify-between items-end">
+            <div>
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Net Worth</p>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter leading-none">
+                <span className="text-sm opacity-40 mr-1">{currencySymbol}</span>
+                {Math.round(wealthStats.netWorth).toLocaleString()}
+              </h2>
+            </div>
+            <div className="flex gap-4">
+              <div className="text-right">
+                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Assets</p>
+                <p className="text-xs font-black text-emerald-500">{currencySymbol}{Math.round(wealthStats.assets).toLocaleString()}</p>
               </div>
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-widest leading-none">Decision Hub</h3>
-                <p className="text-[7px] font-bold text-white/70 uppercase tracking-[0.2em] mt-1">AI-Driven Path</p>
+              <div className="text-right">
+                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Debts</p>
+                <p className="text-xs font-black text-rose-500">{currencySymbol}{Math.round(wealthStats.liabilities).toLocaleString()}</p>
               </div>
             </div>
+          </div>
+        </section>
 
-            {!decisionAdvice ? (
-              <div className="space-y-3">
-                <div className="flex bg-white/10 p-1 rounded-xl border border-white/20 backdrop-blur-2xl">
-                  <button onClick={() => setDecisionType('Vacation')} className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${decisionType === 'Vacation' ? 'bg-white text-indigo-900 shadow-xl' : 'text-white/80 hover:text-white'}`}>Vacation</button>
-                  <button onClick={() => setDecisionType('BigPurchase')} className={`flex-1 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${decisionType === 'BigPurchase' ? 'bg-white text-indigo-900 shadow-xl' : 'text-white/80 hover:text-white'}`}>Purchase</button>
-                </div>
-                <div className="relative">
-                   <div className="absolute left-4 top-1/2 -translate-y-1/2 text-white/50 font-black text-base">{currencySymbol}</div>
-                   <input 
-                    type="number" 
-                    value={estimatedCost} 
-                    onChange={(e) => setEstimatedCost(e.target.value)} 
-                    placeholder="Planned cost..." 
-                    className="w-full bg-white/10 border border-white/20 rounded-xl pl-10 pr-4 py-3 text-white font-black text-sm outline-none focus:border-white/40 placeholder:text-white/40 shadow-inner backdrop-blur-md" 
+        <section className={sectionClass}>
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 size={12} className="text-brand-primary" />
+            <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Weekly Momentum</h3>
+          </div>
+          <div className="h-24 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyData} margin={{ top: 0, right: 0, left: -40, bottom: 0 }}>
+                <XAxis dataKey="week" hide />
+                <YAxis hide />
+                <Tooltip 
+                  cursor={{fill: 'transparent'}}
+                  content={({active, payload}) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-slate-900/90 backdrop-blur px-2 py-1 rounded-lg border border-white/10">
+                          <p className="text-[8px] font-black text-white">{payload[0].payload.week}: {currencySymbol}{payload[0].value.toLocaleString()}</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Bar dataKey="amount" radius={[4, 4, 0, 0]} fill="var(--brand-primary)" barSize={24} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex justify-between mt-2 px-1">
+             {weeklyData.map(w => <span key={w.week} className="text-[7px] font-black text-slate-400 uppercase">{w.week}</span>)}
+          </div>
+        </section>
+
+        <section className={sectionClass}>
+          <div className="flex items-center gap-2 mb-3">
+            <Activity size={12} className="text-brand-primary" />
+            <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Spend Velocity</h3>
+          </div>
+          <div className="h-40 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={velocityData} margin={{ top: 0, right: 10, left: -40, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorSpent" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--brand-primary)" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="var(--brand-primary)" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="day" hide />
+                <YAxis hide />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '10px' }}
+                />
+                <Legend 
+                  verticalAlign="top" 
+                  align="right" 
+                  iconType="circle"
+                  wrapperStyle={{ paddingBottom: '10px', fontSize: '8px', fontWeight: 'bold', textTransform: 'uppercase' }}
+                />
+                <Area 
+                  name="Actual"
+                  type="monotone" 
+                  dataKey="Actual" 
+                  stroke="var(--brand-primary)" 
+                  strokeWidth={2.5} 
+                  fillOpacity={1} 
+                  fill="url(#colorSpent)" 
+                />
+                <Area 
+                  name="Budget"
+                  type="monotone" 
+                  dataKey="Budget" 
+                  stroke="rgba(148, 163, 184, 0.4)" 
+                  strokeWidth={1} 
+                  strokeDasharray="5 5"
+                  fill="transparent" 
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+
+        <div className="grid grid-cols-5 gap-2 mb-1">
+          <section className={`${sectionClass} col-span-2 !mb-0 flex flex-col items-center justify-center`}>
+            <div className="h-40 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie 
+                    data={pieData.length > 0 ? pieData : [{name: 'Empty', value: 1, color: '#f1f5f9'}]} 
+                    cx="50%" cy="40%" innerRadius={22} outerRadius={32} paddingAngle={2} dataKey="value" stroke="none"
+                  >
+                    {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}
+                  </Pie>
+                  <Legend 
+                    verticalAlign="bottom" 
+                    align="center" 
+                    iconType="circle"
+                    layout="vertical"
+                    wrapperStyle={{ fontSize: '7px', fontWeight: '900', textTransform: 'uppercase', paddingTop: '10px' }}
                   />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+          <section className={`${sectionClass} col-span-3 !mb-0`}>
+            <div className="flex items-center gap-1.5 mb-2.5">
+               <ListOrdered size={10} className="text-slate-400" />
+               <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Top Outflows</p>
+            </div>
+            <div className="space-y-2">
+               {stats.topMerchants.length > 0 ? stats.topMerchants.map((m, i) => (
+                 <div key={i} className="flex justify-between items-center group">
+                    <span className="text-[9px] font-bold text-slate-700 dark:text-slate-300 truncate max-w-[80px] group-hover:text-brand-primary transition-colors">{m.name}</span>
+                    <span className="text-[9px] font-black text-slate-900 dark:text-white">{currencySymbol}{m.amount.toLocaleString()}</span>
+                 </div>
+               )) : (
+                 <p className="text-[8px] font-bold text-slate-300 uppercase py-4">No data yet</p>
+               )}
+            </div>
+          </section>
+        </div>
+
+        <section className={`${sectionClass} mt-1`}>
+          <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 pl-1">Tactical Insights</h3>
+          <div className="flex overflow-x-auto no-scrollbar gap-2 -mx-2 px-2 pb-2">
+            {insights ? insights.map((insight, idx) => (
+              <div key={idx} className="flex-none w-[160px] bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-100 dark:border-slate-800/50 shadow-sm flex flex-col justify-between h-24">
+                <div className="flex items-start gap-2">
+                  <Sparkles size={12} className="text-brand-primary shrink-0" />
+                  <p className="text-[8px] font-bold text-slate-800 dark:text-slate-200 leading-tight line-clamp-3">{insight.tip}</p>
                 </div>
-                <button 
-                  onClick={handleConsultAI} 
-                  disabled={!estimatedCost || isConsultingAI}
-                  className="w-full py-3 bg-white text-indigo-900 font-black rounded-xl shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all text-[10px] uppercase tracking-widest disabled:opacity-50"
-                >
-                  {isConsultingAI ? <Loader2 size={14} className="animate-spin" /> : <><Sparkles size={14} className="text-brand-accent" /> Analyze Path</>}
-                </button>
+                <span className="text-[7px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 dark:bg-indigo-900/40 px-1.5 py-0.5 rounded w-fit">{insight.impact}</span>
               </div>
-            ) : (
-              <div className="space-y-3 animate-kick">
-                <div className="bg-white/15 p-3 rounded-xl border border-white/25 flex items-center justify-between shadow-lg backdrop-blur-3xl">
-                   <div className="flex items-center gap-2">
-                     <div className={`w-2.5 h-2.5 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.6)] animate-pulse ${decisionAdvice.status === 'Green' ? 'bg-emerald-400' : decisionAdvice.status === 'Yellow' ? 'bg-amber-400' : 'bg-rose-500'}`} />
-                     <span className="text-[11px] font-black uppercase tracking-wider">{decisionAdvice.status} Light</span>
-                   </div>
-                   <div className="text-right">
-                     <span className="text-lg font-black">{decisionAdvice.score}%</span>
-                   </div>
-                </div>
-                <p className="text-[10px] font-bold text-indigo-50 leading-relaxed italic px-1">"{decisionAdvice.reasoning}"</p>
-                <div className="flex gap-2">
-                   <button onClick={() => setDecisionAdvice(null)} className="flex-1 py-2 bg-white/10 rounded-lg text-[8px] font-black uppercase tracking-widest border border-white/20">Reset</button>
-                   <div className="flex-[2] bg-white/20 rounded-lg px-3 py-2 flex items-center justify-between text-[8px] font-black uppercase tracking-widest backdrop-blur-md">
-                      <span className="opacity-70">Wait Time</span>
-                      <span className="text-[10px]">{decisionAdvice.waitTime}</span>
-                   </div>
-                </div>
+            )) : (
+              <div className="w-full text-center py-6">
+                 <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.2em]">Scanning Financial History...</p>
               </div>
             )}
           </div>
-        </div>
+        </section>
       </div>
-
-      {/* 4. STRATEGY CHIPS */}
-      <div className="space-y-2 px-1">
-        <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] pl-1">Portfolio Strategy</h3>
-        <div className="flex overflow-x-auto no-scrollbar gap-3 pb-2 -mx-1 px-1">
-          {insights ? insights.map((insight, idx) => (
-            <div key={idx} className="flex-none w-[220px] bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-md flex flex-col justify-between group transition-colors">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg text-brand-primary shadow-sm group-hover:scale-110 transition-transform">
-                  <Sparkles size={14} />
-                </div>
-                <p className="text-[10px] font-bold text-slate-800 dark:text-slate-200 leading-snug">{insight.tip}</p>
-              </div>
-              <div className="mt-3 pt-2 border-t border-slate-50 dark:border-slate-700/50 flex justify-between items-center">
-                 <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Outcome</span>
-                 <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">{insight.impact}</span>
-              </div>
-            </div>
-          )) : (
-            <div className="w-full text-center py-6 bg-slate-50/50 dark:bg-slate-800/20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-               <div className="flex flex-col items-center justify-center gap-2">
-                 <Loader2 size={16} className="animate-spin text-slate-300" />
-                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Finding Opportunities...</p>
-               </div>
-            </div>
-          )}
-        </div>
-      </div>
-
     </div>
   );
 };

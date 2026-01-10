@@ -1,30 +1,34 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { View, Expense, BudgetRule, UserSettings, Category, UserProfile, Frequency, RecurringItem, Income, IncomeType, AppTheme, Notification, WealthItem, WealthType, WealthCategory } from './types';
+import { View, Expense, BudgetRule, UserSettings, Category, UserProfile, Frequency, RecurringItem, Income, IncomeType, AppTheme, Notification, WealthItem, WealthType, WealthCategory, DensityLevel, BudgetItem } from './types';
 import Dashboard from './components/Dashboard';
-import RecordList from './components/RecordList';
+import Transactions from './components/Transactions';
 import AddRecord from './components/AddRecord';
-import RulesEngine from './components/RulesEngine';
 import Settings from './components/Settings';
 import Navbar from './components/Navbar';
 import CategorizationModal from './components/CategorizationModal';
 import NotificationPane from './components/NotificationPane';
 import AuthScreen from './components/AuthScreen';
-import { Loader2, LayoutDashboard, List, Workflow, Settings as SettingsIcon, Bell, X, Sparkles, ShieldCheck, Zap, Globe, Wallet } from 'lucide-react';
+import Accounts from './components/Accounts';
+import VersionLog from './components/VersionLog';
+import BudgetPlanner from './components/BudgetPlanner';
+import { Loader2, LayoutDashboard, List, Settings as SettingsIcon, Bell, Wallet, Target } from 'lucide-react';
 import { DEFAULT_SPLIT, getCurrencySymbol } from './constants';
 import { syncToGoogleDrive, restoreFromGoogleDrive, BackupData } from './services/cloudSync';
+import { triggerHaptic } from './utils/haptics';
 
-const STORAGE_KEY = 'jk_budget_data_v5';
+const STORAGE_KEY = 'jk_budget_data_whole_num_v8';
 
 const INITIAL_SETTINGS: UserSettings = {
   monthlyIncome: 300000,
   split: DEFAULT_SPLIT,
   isOnboarded: true, 
   theme: 'system',
-  appTheme: 'Standard',
+  appTheme: 'Spiderman',
   isCloudSyncEnabled: false,
   currency: 'INR',
-  dataFilter: 'all'
+  dataFilter: 'all',
+  density: 'Compact'
 };
 
 const calculateNextDueDate = (currentDate: string, frequency: Frequency): string => {
@@ -45,6 +49,7 @@ const App: React.FC = () => {
   const [wealthItems, setWealthItems] = useState<WealthItem[]>([]);
   const [rules, setRules] = useState<BudgetRule[]>([]);
   const [recurringItems, setRecurringItems] = useState<RecurringItem[]>([]);
+  const [budgetItems, setBudgetItems] = useState<BudgetItem[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [viewDate, setViewDate] = useState(new Date());
   
@@ -55,46 +60,6 @@ const App: React.FC = () => {
   const [recordToEdit, setRecordToEdit] = useState<Expense | Income | WealthItem | null>(null);
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.settings) setSettings(parsed.settings);
-        if (parsed.expenses) setExpenses(parsed.expenses);
-        if (parsed.incomes) setIncomes(parsed.incomes);
-        if (parsed.wealthItems) setWealthItems(parsed.wealthItems);
-        if (parsed.rules) setRules(parsed.rules);
-        if (parsed.user) {
-          setUser(parsed.user);
-          setIsAuthenticated(true);
-        }
-        if (parsed.recurringItems) setRecurringItems(parsed.recurringItems);
-        if (parsed.notifications) setNotifications(parsed.notifications);
-      } catch (e) {
-        console.error("Failed to parse local storage", e);
-      }
-    }
-    setIsLoading(false);
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ 
-        settings, expenses, incomes, wealthItems, rules, user, recurringItems, notifications 
-      }));
-    }
-  }, [settings, expenses, incomes, wealthItems, rules, user, recurringItems, notifications, isLoading]);
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    const isDark = settings.theme === 'dark' || 
-      (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    if (isDark) root.classList.add('dark');
-    else root.classList.remove('dark');
-    root.setAttribute('data-theme', settings.appTheme || 'Standard');
-  }, [settings.theme, settings.appTheme]);
 
   const addNotification = useCallback((notif: Omit<Notification, 'timestamp' | 'read'> & { id?: string }) => {
     const id = notif.id || Math.random().toString(36).substring(2, 11);
@@ -116,16 +81,18 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const handleClearNotifications = () => setNotifications([]);
-  const handleMarkNotificationsRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-
-  const handleLoadMockData = useCallback(() => {
+  const generateMockData = useCallback(() => {
     const newExpenses: Expense[] = [];
     const newIncomes: Income[] = [];
     const newWealth: WealthItem[] = [];
     const today = new Date();
 
-    // Generate 6 months of data
+    newWealth.push({ id: 'mock-w1', type: 'Investment', category: 'Checking Account', name: 'Primary Bank (HDFC)', value: 485000, date: today.toISOString(), isMock: true });
+    newWealth.push({ id: 'mock-w2', type: 'Investment', category: 'Savings Account', name: 'Emergency Vault', value: 1250000, date: today.toISOString(), isMock: true });
+    newWealth.push({ id: 'mock-w3', type: 'Investment', category: 'Mutual Fund', name: 'Quant Small Cap', value: 350000, date: today.toISOString(), isMock: true });
+    newWealth.push({ id: 'mock-w4', type: 'Investment', category: 'Stock', name: 'Bluechip Portfolio', value: 850000, date: today.toISOString(), isMock: true });
+    newWealth.push({ id: 'mock-w7', type: 'Liability', category: 'Loan', name: 'Home Mortgage', value: 4500000, date: today.toISOString(), isMock: true });
+
     for (let m = 0; m < 6; m++) {
       const monthDate = new Date(today.getFullYear(), today.getMonth() - m, 1);
       const year = monthDate.getFullYear();
@@ -133,163 +100,311 @@ const App: React.FC = () => {
 
       // Income
       newIncomes.push({
-        id: `mock-inc-${m}`,
-        amount: 250000 + Math.random() * 50000,
-        date: monthDate.toISOString().split('T')[0],
+        id: `mock-inc-sal-${m}`,
+        amount: 285000,
+        date: new Date(year, month, 1).toISOString().split('T')[0],
         type: 'Salary',
-        note: 'Monthly Salary Credit',
+        note: 'Primary Employment Credit',
         isMock: true
       });
 
-      if (Math.random() > 0.5) {
-        newIncomes.push({
-          id: `mock-freelance-${m}`,
-          amount: 20000 + Math.random() * 30000,
-          date: new Date(year, month, 15).toISOString().split('T')[0],
-          type: 'Freelance',
-          note: 'Project Payment',
-          isMock: true
-        });
-      }
-
-      // Expenses - Fixed
+      // Needs
       newExpenses.push({
         id: `mock-rent-${m}`,
-        amount: 45000,
+        amount: 65000,
         date: new Date(year, month, 5).toISOString().split('T')[0],
         category: 'Needs',
-        merchant: 'Home Rental Corp',
+        subCategory: 'Rent/Mortgage',
+        merchant: 'Skyline Properties',
         isConfirmed: true,
         isMock: true
       });
 
-      // Expenses - Variable
-      const merchants = [
-        { name: 'Starbucks', cat: 'Wants' as Category, amt: [200, 800] },
-        { name: 'Walmart', cat: 'Needs' as Category, amt: [2000, 6000] },
-        { name: 'Amazon', cat: 'Wants' as Category, amt: [500, 5000] },
-        { name: 'Netflix', cat: 'Wants' as Category, amt: [800, 800] },
-        { name: 'Uber', cat: 'Needs' as Category, amt: [300, 1200] },
-        { name: 'Shell Oil', cat: 'Needs' as Category, amt: [1500, 3500] },
-        { name: 'Local Cafe', cat: 'Wants' as Category, amt: [400, 1200] },
-        { name: 'Gym Membership', cat: 'Needs' as Category, amt: [2500, 2500] },
-      ];
+      newExpenses.push({
+        id: `mock-grocery-${m}`,
+        amount: Math.round(12000 + Math.random() * 5000),
+        date: new Date(year, month, 10).toISOString().split('T')[0],
+        category: 'Needs',
+        subCategory: 'Groceries',
+        merchant: 'BigBasket',
+        isConfirmed: true,
+        isMock: true
+      });
 
-      for (let i = 0; i < 15; i++) {
-        const mIdx = Math.floor(Math.random() * merchants.length);
-        const merchant = merchants[mIdx];
-        newExpenses.push({
-          id: `mock-exp-${m}-${i}`,
-          amount: merchant.amt[0] + Math.random() * (merchant.amt[1] - merchant.amt[0]),
-          date: new Date(year, month, Math.floor(Math.random() * 28) + 1).toISOString().split('T')[0],
-          category: merchant.cat,
-          merchant: merchant.name,
-          isConfirmed: true,
-          isMock: true
-        });
-      }
+      newExpenses.push({
+        id: `mock-util-${m}`,
+        amount: Math.round(4000 + Math.random() * 2000),
+        date: new Date(year, month, 12).toISOString().split('T')[0],
+        category: 'Needs',
+        subCategory: 'Utilities',
+        merchant: 'Electricity Board',
+        isConfirmed: true,
+        isMock: true
+      });
+
+      // Savings
+      newExpenses.push({
+        id: `mock-sip-${m}`,
+        amount: 50000,
+        date: new Date(year, month, 7).toISOString().split('T')[0],
+        category: 'Savings',
+        subCategory: 'SIP/Mutual Fund',
+        merchant: 'Groww',
+        isConfirmed: true,
+        isMock: true
+      });
+
+      newExpenses.push({
+        id: `mock-emergency-${m}`,
+        amount: 20000,
+        date: new Date(year, month, 20).toISOString().split('T')[0],
+        category: 'Savings',
+        subCategory: 'Emergency Fund',
+        merchant: 'Internal Transfer',
+        isConfirmed: true,
+        isMock: true
+      });
+
+      // Wants
+      newExpenses.push({
+        id: `mock-dining-${m}`,
+        amount: Math.round(8000 + Math.random() * 4000),
+        date: new Date(year, month, 15).toISOString().split('T')[0],
+        category: 'Wants',
+        subCategory: 'Dining',
+        merchant: 'Zomato',
+        isConfirmed: true,
+        isMock: true
+      });
+
+      newExpenses.push({
+        id: `mock-ent-${m}`,
+        amount: Math.round(2000 + Math.random() * 3000),
+        date: new Date(year, month, 22).toISOString().split('T')[0],
+        category: 'Wants',
+        subCategory: 'Entertainment',
+        merchant: 'PVR Cinemas',
+        isConfirmed: true,
+        isMock: true
+      });
+
+      newExpenses.push({
+        id: `mock-sub-${m}`,
+        amount: 1499,
+        date: new Date(year, month, 12).toISOString().split('T')[0],
+        category: 'Wants',
+        subCategory: 'Subscription',
+        merchant: 'Netflix',
+        isConfirmed: true,
+        isMock: true
+      });
     }
+    return { newExpenses, newIncomes, newWealth };
+  }, []);
 
-    // Wealth Items (Current Portfolio)
-    newWealth.push({
-      id: 'mock-wealth-1',
-      type: 'Investment',
-      category: 'Stock',
-      name: 'NVIDIA Portfolio',
-      value: 1250000,
-      date: today.toISOString(),
-      isMock: true
-    });
-    newWealth.push({
-      id: 'mock-wealth-2',
-      type: 'Investment',
-      category: 'Mutual Fund',
-      name: 'HDFC Index Fund',
-      value: 840000,
-      date: today.toISOString(),
-      isMock: true
-    });
-    newWealth.push({
-      id: 'mock-wealth-3',
-      type: 'Liability',
-      category: 'Credit Card',
-      name: 'Amex Platinum',
-      value: 42000,
-      date: today.toISOString(),
-      isMock: true
-    });
-
+  const handleLoadMockData = () => {
+    triggerHaptic(30);
+    const { newExpenses, newIncomes, newWealth } = generateMockData();
     setExpenses(newExpenses);
     setIncomes(newIncomes);
     setWealthItems(newWealth);
     
+    // Default initial budget items with subcategories
+    setBudgetItems([
+      { id: 'b1', name: 'Rent & Maintenance', amount: 65000, category: 'Needs', subCategory: 'Rent/Mortgage' },
+      { id: 'b2', name: 'Groceries & Household', amount: 18000, category: 'Needs', subCategory: 'Groceries' },
+      { id: 'b3', name: 'Utilities & Bills', amount: 8000, category: 'Needs', subCategory: 'Utilities' },
+      { id: 'b4', name: 'School Fees', amount: 25000, category: 'Needs', subCategory: 'Education' },
+      { id: 'b5', name: 'Leisure & Dining', amount: 20000, category: 'Wants', subCategory: 'Dining' },
+      { id: 'b6', name: 'Subscriptions', amount: 5000, category: 'Wants', subCategory: 'Subscription' },
+      { id: 'b7', name: 'SIP Investment', amount: 50000, category: 'Savings', subCategory: 'SIP/Mutual Fund' },
+      { id: 'b8', name: 'Emergency Buffer', amount: 20000, category: 'Savings', subCategory: 'Emergency Fund' }
+    ]);
+
+    // Add default recurring items
+    setRecurringItems([
+      {
+        id: 'rec1',
+        amount: 65000,
+        category: 'Needs',
+        subCategory: 'Rent/Mortgage',
+        note: 'Monthly Rent',
+        merchant: 'Skyline Properties',
+        frequency: 'Monthly',
+        nextDueDate: '2025-02-05'
+      },
+      {
+        id: 'rec2',
+        amount: 50000,
+        category: 'Savings',
+        subCategory: 'SIP/Mutual Fund',
+        note: 'Equity SIP',
+        merchant: 'Groww',
+        frequency: 'Monthly',
+        nextDueDate: '2025-02-07'
+      },
+      {
+        id: 'rec3',
+        amount: 1499,
+        category: 'Wants',
+        subCategory: 'Subscription',
+        note: 'Netflix Premium',
+        merchant: 'Netflix',
+        frequency: 'Monthly',
+        nextDueDate: '2025-02-12'
+      }
+    ]);
+
     addNotification({
       type: 'Activity',
-      title: 'Demo Data Injected',
-      message: '6 months of transactions and a sample portfolio have been loaded for preview.',
+      title: 'Sample Data Loaded',
+      message: 'Financial state updated with comprehensive 6-month historical mock data.',
       severity: 'success'
     });
-  }, [addNotification]);
+    
+    setCurrentView('Dashboard');
+  };
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    let loadedDataFound = false;
+    
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed.settings) setSettings({ ...INITIAL_SETTINGS, ...parsed.settings, density: 'Compact' });
+        if (parsed.expenses) { setExpenses(parsed.expenses); loadedDataFound = true; }
+        if (parsed.incomes) setIncomes(parsed.incomes);
+        if (parsed.wealthItems) setWealthItems(parsed.wealthItems);
+        if (parsed.rules) setRules(parsed.rules);
+        if (parsed.user) { setUser(parsed.user); setIsAuthenticated(true); }
+        if (parsed.recurringItems) setRecurringItems(parsed.recurringItems);
+        if (parsed.budgetItems) setBudgetItems(parsed.budgetItems);
+        if (parsed.notifications) setNotifications(parsed.notifications);
+      } catch (e) {
+        console.error("Failed to parse local storage", e);
+      }
+    }
+
+    if (!loadedDataFound) {
+      handleLoadMockData();
+    }
+
+    setIsLoading(false);
+  }, []); // Only run once on mount
+
+  useEffect(() => {
+    if (!isLoading) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ 
+        settings, expenses, incomes, wealthItems, rules, user, recurringItems, budgetItems, notifications 
+      }));
+    }
+  }, [settings, expenses, incomes, wealthItems, rules, user, recurringItems, budgetItems, notifications, isLoading]);
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    const isDark = settings.theme === 'dark' || 
+      (settings.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    if (isDark) root.classList.add('dark');
+    else root.classList.remove('dark');
+    root.setAttribute('data-theme', settings.appTheme || 'Spiderman');
+  }, [settings.theme, settings.appTheme]);
+
+  const handleClearNotifications = () => { triggerHaptic(); setNotifications([]); };
+  const handleMarkNotificationsRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
   const handleCloudSync = useCallback(async () => {
     if (!user) return;
     setIsSyncing(true);
+    triggerHaptic();
     try {
       const data: BackupData = { 
         expenses, incomes, wealthItems, rules, recurringItems, settings, timestamp: new Date().toISOString() 
       };
-      const token = user?.accessToken || 'guest_sync_token';
+      const token = user?.accessToken || 'guest_token';
       const syncTime = await syncToGoogleDrive(token, data);
       setSettings(prev => ({ ...prev, lastSynced: syncTime }));
-      addNotification({
-        type: 'Activity',
-        title: 'Cloud Backup Complete',
-        message: 'Your transactions and portfolio were successfully synced to Google Drive.',
-        severity: 'success'
-      });
+      addNotification({ type: 'Activity', title: 'State Persisted', message: 'Vault sync verified.', severity: 'success' });
     } catch (error) {
-      addNotification({
-        type: 'Activity',
-        title: 'Sync Failed',
-        message: 'Unable to connect to Google Drive. Your data remains safe in local storage.',
-        severity: 'error'
-      });
-    } finally {
-      setIsSyncing(false);
-    }
+      addNotification({ type: 'Activity', title: 'Sync Error', message: 'Vault unreachable.', severity: 'error' });
+    } finally { setIsSyncing(false); }
   }, [user, expenses, incomes, wealthItems, rules, recurringItems, settings, addNotification]);
 
   const handleLogin = (profile: UserProfile) => {
     setUser(profile);
     setSettings(prev => ({ ...prev, isOnboarded: true }));
     setIsAuthenticated(true);
-    addNotification({
-      type: 'Activity',
-      title: 'Success',
-      message: profile.id.startsWith('guest') ? 'Welcome, Guest! Data is stored locally.' : `Welcome back, ${profile.name}!`,
-      severity: 'success'
-    });
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
+  const handleLogout = () => { triggerHaptic(20); setUser(null); setIsAuthenticated(false); };
+
+  const handleAddBudget = (item: Omit<BudgetItem, 'id'>) => {
+    triggerHaptic();
+    setBudgetItems(prev => [...prev, { ...item, id: Math.random().toString(36).substring(2, 11) }]);
+  };
+
+  const handleDeleteBudget = (id: string) => {
+    triggerHaptic();
+    setBudgetItems(prev => prev.filter(b => b.id !== id));
+  };
+
+  const handleDeleteExpense = (id: string) => {
+    triggerHaptic(20);
+    setExpenses(prev => prev.filter(e => e.id !== id));
+  };
+
+  const handleUpdateExpense = (id: string, updates: Partial<Expense>) => {
+    setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+    setIsAddingRecord(false);
+  };
+
+  const handleDeleteIncome = (id: string) => {
+    triggerHaptic(20);
+    setIncomes(prev => prev.filter(i => i.id !== id));
+  };
+
+  const handleUpdateIncome = (id: string, updates: Partial<Income>) => {
+    setIncomes(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
+    setIsAddingRecord(false);
+  };
+
+  const handleAddWealth = (item: Omit<WealthItem, 'id'>) => {
+    setWealthItems(prev => [...prev, { ...item, id: Math.random().toString(36).substring(2, 11) }]);
+  };
+
+  const handleUpdateWealth = (id: string, updates: Partial<WealthItem>) => {
+    setWealthItems(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
+  };
+
+  const handleDeleteWealth = (id: string) => {
+    triggerHaptic(20);
+    setWealthItems(prev => prev.filter(w => w.id !== id));
+  };
+
+  const handleTransfer = (fromId: string, toId: string, amount: number, date: string, note: string) => {
+    setWealthItems(prev => prev.map(w => {
+      if (w.id === fromId) return { ...w, value: w.value - amount };
+      if (w.id === toId) return { ...w, value: w.value + amount };
+      return w;
+    }));
     addNotification({
       type: 'Activity',
-      title: 'Signed Out',
-      message: 'You have been securely logged out.',
-      severity: 'info'
+      title: 'Transfer Executed',
+      message: `Shifted ${getCurrencySymbol(settings.currency)}${amount} between accounts.`,
+      severity: 'success'
     });
+    setIsAddingRecord(false);
   };
 
   const handleAddExpense = (expense: Omit<Expense, 'id'>, frequency: Frequency) => {
     const id = Math.random().toString(36).substring(2, 11);
-    setExpenses(prev => [...prev, { ...expense, id }]);
+    const roundedAmt = Math.round(expense.amount);
+    setExpenses(prev => [...prev, { ...expense, id, amount: roundedAmt }]);
     if (frequency !== 'None') {
       const nextDueDate = calculateNextDueDate(expense.date, frequency);
       setRecurringItems(prev => [...prev, {
         id: Math.random().toString(36).substring(2, 11),
-        amount: expense.amount,
+        amount: roundedAmt,
         category: expense.category,
         subCategory: expense.subCategory,
         note: expense.note || '',
@@ -299,357 +414,111 @@ const App: React.FC = () => {
       }]);
     }
     setIsAddingRecord(false);
-    addNotification({
-      type: 'Activity',
-      title: 'Expense Saved',
-      message: `${expense.merchant} recorded in ${expense.category}.`,
-      severity: 'success'
-    });
   };
 
   const handleAddIncome = (income: Omit<Income, 'id'>) => {
-    setIncomes(prev => [...prev, { ...income, id: Math.random().toString(36).substring(2, 11) }]);
+    const roundedAmt = Math.round(income.amount);
+    setIncomes(prev => [...prev, { ...income, amount: roundedAmt, id: Math.random().toString(36).substring(2, 11) }]);
+    if (income.targetAccountId) {
+      setWealthItems(prev => prev.map(w => 
+        w.id === income.targetAccountId ? { ...w, value: w.value + roundedAmt } : w
+      ));
+    }
     setIsAddingRecord(false);
-    addNotification({
-      type: 'Activity',
-      title: 'Income Added',
-      message: `${getCurrencySymbol(settings.currency)}${income.amount} inflow recorded.`,
-      severity: 'success'
-    });
   };
-
-  const handleAddWealth = (item: Omit<WealthItem, 'id'>) => {
-    setWealthItems(prev => [...prev, { ...item, id: Math.random().toString(36).substring(2, 11) }]);
-    setIsAddingRecord(false);
-    addNotification({
-      type: 'Activity',
-      title: 'Portfolio Updated',
-      message: `${item.name} added to your ${item.type}s.`,
-      severity: 'success'
-    });
-  };
-
-  const handleUpdateExpense = (id: string, updates: Partial<Expense>) => {
-    setExpenses(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
-    setIsAddingRecord(false);
-    setRecordToEdit(null);
-    addNotification({
-      type: 'Activity',
-      title: 'Update Success',
-      message: 'Transaction details modified.',
-      severity: 'success'
-    });
-  };
-
-  const handleUpdateIncome = (id: string, updates: Partial<Income>) => {
-    setIncomes(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
-    setIsAddingRecord(false);
-    setRecordToEdit(null);
-    addNotification({
-      type: 'Activity',
-      title: 'Update Success',
-      message: 'Income source updated.',
-      severity: 'success'
-    });
-  };
-
-  const handleUpdateWealth = (id: string, updates: Partial<WealthItem>) => {
-    setWealthItems(prev => prev.map(w => w.id === id ? { ...w, ...updates } : w));
-    setIsAddingRecord(false);
-    setRecordToEdit(null);
-    addNotification({
-      type: 'Activity',
-      title: 'Portfolio Updated',
-      message: 'Asset valuation synchronized.',
-      severity: 'success'
-    });
-  };
-
-  const handleDeleteExpense = (id: string) => {
-    setExpenses(prev => prev.filter(e => e.id !== id));
-    addNotification({
-      type: 'Activity',
-      title: 'Deleted',
-      message: 'Expense removed from history.',
-      severity: 'warning'
-    });
-  };
-  const handleDeleteIncome = (id: string) => {
-    setIncomes(prev => prev.filter(i => i.id !== id));
-    addNotification({
-      type: 'Activity',
-      title: 'Deleted',
-      message: 'Income record removed.',
-      severity: 'warning'
-    });
-  };
-  const handleDeleteWealth = (id: string) => {
-    setWealthItems(prev => prev.filter(w => w.id !== id));
-    addNotification({
-      type: 'Activity',
-      title: 'Deleted',
-      message: 'Asset/Liability removed from portfolio.',
-      severity: 'warning'
-    });
-  };
-
-  const filteredExpenses = useMemo(() => {
-    if (settings.dataFilter === 'all') return expenses;
-    if (settings.dataFilter === 'mock') return expenses.filter(e => e.isMock);
-    return expenses.filter(e => !e.isMock);
-  }, [expenses, settings.dataFilter]);
-
-  const filteredIncomes = useMemo(() => {
-    if (settings.dataFilter === 'all') return incomes;
-    if (settings.dataFilter === 'mock') return incomes.filter(i => i.isMock);
-    return incomes.filter(i => !i.isMock);
-  }, [incomes, settings.dataFilter]);
-
-  const filteredWealth = useMemo(() => {
-    if (settings.dataFilter === 'all') return wealthItems;
-    if (settings.dataFilter === 'mock') return wealthItems.filter(w => w.isMock);
-    return wealthItems.filter(w => !w.isMock);
-  }, [wealthItems, settings.dataFilter]);
 
   const currentMonthIncome = useMemo(() => {
     const m = viewDate.getMonth();
     const y = viewDate.getFullYear();
-    const realized = filteredIncomes
-      .filter(i => {
-        const d = new Date(i.date);
-        return d.getMonth() === m && d.getFullYear() === y;
-      })
+    const realized = incomes
+      .filter(i => { const d = new Date(i.date); return d.getMonth() === m && d.getFullYear() === y; })
       .reduce((sum, i) => sum + i.amount, 0);
-    return realized > 0 ? realized : settings.monthlyIncome;
-  }, [filteredIncomes, viewDate, settings.monthlyIncome]);
+    return Math.round(realized > 0 ? realized : settings.monthlyIncome);
+  }, [incomes, viewDate, settings.monthlyIncome]);
 
   const totalSpent = useMemo(() => {
     const m = viewDate.getMonth();
     const y = viewDate.getFullYear();
-    return filteredExpenses
+    return Math.round(expenses
       .filter(e => e.isConfirmed && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y)
-      .reduce((sum, e) => sum + e.amount, 0);
-  }, [filteredExpenses, viewDate]);
+      .reduce((sum, e) => sum + e.amount, 0));
+  }, [expenses, viewDate]);
 
   const remainingPercentage = useMemo(() => {
     if (currentMonthIncome <= 0) return 100;
     const spentPerc = (totalSpent / currentMonthIncome) * 100;
-    return Math.max(0, 100 - spentPerc);
+    return Math.round(Math.max(0, 100 - spentPerc));
   }, [totalSpent, currentMonthIncome]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const handleViewChange = (v: View) => { triggerHaptic(); setCurrentView(v); };
 
-  if (isLoading) return (
-    <div className="w-full h-screen bg-white dark:bg-slate-900 flex items-center justify-center">
-      <Loader2 className="animate-spin text-brand-primary" size={32} />
-    </div>
-  );
-
+  if (isLoading) return <div className="w-full h-screen bg-white dark:bg-slate-900 flex items-center justify-center"><Loader2 className="animate-spin text-brand-primary" size={32} /></div>;
   if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} />;
 
   return (
     <div className="h-screen overflow-hidden bg-white dark:bg-slate-900 flex flex-col transition-colors duration-300">
-      <header className="flex-none bg-gradient-to-b from-white/95 to-slate-50/95 dark:from-slate-950/95 dark:to-slate-900/95 px-4 py-2 border-b border-slate-100 dark:border-white/10 shadow-sm transition-colors z-50 backdrop-blur-md">
+      <header className="flex-none bg-gradient-to-b from-white/95 to-slate-50/95 dark:from-slate-950/95 dark:to-slate-900/95 px-4 py-3 border-b border-slate-100 dark:border-white/10 shadow-sm z-50 backdrop-blur-md">
         <div className="max-w-2xl mx-auto flex justify-between items-center w-full">
           <div className="flex flex-col items-start">
-            <div className="flex items-center gap-1.5">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="text-brand-primary">
-                 <path d="M4 8C4 7.44772 4.44772 7 5 7H19C19.5523 7 20 7.44772 20 8V20C20 21.1046 19.1046 22 18 22H6C4.89543 22 4 21.1046 4 20V8Z" fill="currentColor" />
-                 <path d="M8 7V5C8 3.89543 8.89543 3 10 3H14C15.1046 3 16 3.89543 16 5V7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                 <text x="12" y="17" fontSize="8" fontWeight="900" textAnchor="middle" fill="white">JK</text>
-              </svg>
-              <button 
-                onClick={() => setIsShowingVersionLog(true)}
-                className="bg-white/50 dark:bg-white/5 px-1.5 py-0.5 rounded-full border border-slate-100 dark:border-white/10 active:scale-95 transition-transform"
+            <div className="flex items-center gap-2">
+              <svg 
+                width="32" 
+                height="32" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                xmlns="http://www.w3.org/2000/svg" 
+                className="drop-shadow-sm active:scale-95 transition-transform"
               >
-                <span className="text-[8px] font-black text-slate-400 dark:text-slate-500">v1.0</span>
+                <path d="M4 8C4 7.44772 4.44772 7 5 7H19C19.5523 7 20 7.44772 20 8V20C20 21.1046 19.1046 22 18 22H6C4.89543 22 4 21.1046 4 20V8Z" fill="currentColor" className="text-brand-primary" />
+                <path d="M8 7V5C8 3.89543 8.89543 3 10 3H14C15.1046 3 16 3.89543 16 5V7" stroke="currentColor" className="text-brand-primary" strokeWidth="2" strokeLinecap="round" />
+                <text x="12" y="17" fontSize="6" fontWeight="900" textAnchor="middle" fill="white" style={{ fontFamily: 'Plus Jakarta Sans' }}>JK</text>
+              </svg>
+              <button onClick={() => { triggerHaptic(); setIsShowingVersionLog(true); }} className="bg-white/50 dark:bg-white/5 px-1.5 py-0.5 rounded-full border border-slate-100 dark:border-white/10 active:scale-95 transition-transform mt-1">
+                <span className="text-[8px] font-black text-slate-400 dark:text-slate-500">v1.1.8</span>
               </button>
             </div>
-            <h1 className="text-[9px] font-bold text-slate-900 dark:text-white lowercase tracking-tight">just keep it</h1>
+            <h1 className="text-[9px] font-bold text-slate-900 dark:text-white lowercase tracking-tight mt-0.5 ml-1">just keep it</h1>
           </div>
 
           <nav className="flex items-center gap-1">
-            {/* Unified Dashboard/Expenses Toggle with Active Highlighter */}
-            <button
-              onClick={() => setCurrentView(currentView === 'Dashboard' ? 'Expenses' : 'Dashboard')}
-              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all border-2 ${
-                (currentView === 'Dashboard' || currentView === 'Expenses') 
-                ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' 
-                : 'border-transparent text-slate-400'
-              } active:scale-95`}
-              title={currentView === 'Dashboard' ? 'View Transactions' : 'View Dashboard'}
-            >
-              {currentView === 'Dashboard' ? (
-                <List size={20} strokeWidth={2.5} />
-              ) : (
-                <LayoutDashboard size={20} strokeWidth={2.5} />
-              )}
+            <button onClick={() => handleViewChange('Dashboard')} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all border-2 active:scale-90 ${currentView === 'Dashboard' ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-transparent text-slate-400'}`}><LayoutDashboard size={18} strokeWidth={2.5} /></button>
+            <button onClick={() => handleViewChange('Budget')} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all border-2 active:scale-90 ${currentView === 'Budget' ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-transparent text-slate-400'}`}><Target size={18} strokeWidth={2.5} /></button>
+            <button onClick={() => handleViewChange('Accounts')} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all border-2 active:scale-90 ${currentView === 'Accounts' ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-transparent text-slate-400'}`}><Wallet size={18} strokeWidth={2.5} /></button>
+            <button onClick={() => handleViewChange('Transactions')} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all border-2 active:scale-90 ${currentView === 'Transactions' ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-transparent text-slate-400'}`}><List size={18} strokeWidth={2.5} /></button>
+            <button onClick={() => { triggerHaptic(); setIsShowingNotifications(true); handleMarkNotificationsRead(); }} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all border-2 active:scale-90 relative ${isShowingNotifications ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-transparent text-slate-400'}`}>
+              <Bell size={18} strokeWidth={2.5} />
+              {notifications.filter(n=>!n.read).length > 0 && <span className="absolute -top-1 -right-1 w-4 h-4 bg-brand-accent text-white text-[8px] font-black flex items-center justify-center rounded-full border-2 border-white dark:border-slate-900">{notifications.filter(n=>!n.read).length}</span>}
             </button>
-
-            <button
-              onClick={() => setCurrentView('Rules')}
-              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all border-2 ${
-                currentView === 'Rules' ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-transparent text-slate-400'
-              }`}
-            >
-              <Workflow size={20} strokeWidth={2.5} />
-            </button>
-            <button
-              onClick={() => {
-                setIsShowingNotifications(true);
-                handleMarkNotificationsRead();
-              }}
-              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all border-2 relative ${
-                isShowingNotifications ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-transparent text-slate-400'
-              }`}
-            >
-              <Bell size={20} strokeWidth={2.5} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-brand-accent text-white text-[8px] font-black flex items-center justify-center rounded-full border-2 border-white dark:border-slate-900 animate-bounce">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setCurrentView('Profile')}
-              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all overflow-hidden border-2 ${
-                currentView === 'Profile' ? 'border-brand-primary' : 'border-transparent'
-              }`}
-            >
-              {user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover" alt="User Profile" /> : <SettingsIcon size={17} />}
-            </button>
+            <button onClick={() => handleViewChange('Profile')} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all active:scale-90 overflow-hidden border-2 ${currentView === 'Profile' ? 'border-brand-primary' : 'border-transparent'}`}>{user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover" alt="Profile" /> : <SettingsIcon size={17} />}</button>
           </nav>
         </div>
       </header>
 
       <main className="flex-1 overflow-y-auto no-scrollbar bg-white dark:bg-slate-900 relative">
         <div className="max-w-2xl mx-auto w-full px-4 h-full">
-          {currentView === 'Dashboard' && <Dashboard 
-            expenses={filteredExpenses} incomes={filteredIncomes} wealthItems={filteredWealth}
-            settings={{ ...settings, monthlyIncome: currentMonthIncome }} user={user} 
-            onCategorizeClick={() => setIsCategorizing(true)} 
-            onConfirmExpense={(id, cat) => {
-              setExpenses(prev => prev.map(e => e.id === id ? { ...e, category: cat, isConfirmed: true } : e));
-              addNotification({ type: 'Activity', title: 'Confirmed', message: 'Transaction verified.', severity: 'success' });
-            }} 
-            onSmartAdd={() => {}} viewDate={viewDate} onMonthChange={(d) => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + d, 1))} 
-            onGoToDate={(y, m) => setViewDate(new Date(y, m, 1))} 
-          />}
-          {currentView === 'Expenses' && <RecordList 
-            expenses={filteredExpenses} incomes={filteredIncomes} wealthItems={filteredWealth}
-            settings={{ ...settings, monthlyIncome: currentMonthIncome }} 
-            onDeleteExpense={handleDeleteExpense} onDeleteIncome={handleDeleteIncome} onDeleteWealth={handleDeleteWealth}
-            onConfirm={(id, cat) => {
-              setExpenses(prev => prev.map(e => e.id === id ? { ...e, category: cat, isConfirmed: true } : e));
-              addNotification({ type: 'Activity', title: 'Confirmed', message: 'Transaction verified.', severity: 'success' });
-            }} 
-            onUpdateExpense={handleUpdateExpense} onEditRecord={(r) => { setRecordToEdit(r); setIsAddingRecord(true); }} 
-            onAddBulk={(n) => {
-              setExpenses(p => [...p, ...n.map(x => ({ ...x, id: Math.random().toString(36).substring(2, 11), isConfirmed: true }))]);
-            }} 
-            viewDate={viewDate} onMonthChange={(d) => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + d, 1))} 
-            onGoToDate={(y, m) => setViewDate(new Date(y, m, 1))} addNotification={addNotification}
-          />}
-          {currentView === 'Rules' && <RulesEngine 
-            rules={rules} recurringItems={recurringItems} 
-            onAddRule={(r) => { 
-              setRules(p => [...p, { ...r, id: Math.random().toString(36).substring(2, 11) }]); 
-              addNotification({ type: 'Activity', title: 'Rule Created', message: `Keywords matching "${r.keyword}" will now be auto-assigned to ${r.category}.`, severity: 'success' }); 
-            }} 
-            onDeleteRule={(id) => {
-              setRules(p => p.filter(x => x.id !== id));
-              addNotification({ type: 'Activity', title: 'Rule Deleted', message: 'Keyword mapping removed.', severity: 'warning' });
-            }} 
-            onDeleteRecurring={(id) => {
-              setRecurringItems(p => p.filter(x => x.id !== id));
-              addNotification({ type: 'Activity', title: 'Subscription Cancelled', message: 'Recurring tracking stopped.', severity: 'warning' });
-            }} 
-          />}
-          {currentView === 'Profile' && <Settings 
-            settings={settings} user={user} onLogout={handleLogout} 
-            onReset={() => {localStorage.removeItem(STORAGE_KEY); location.reload();}} onToggleTheme={() => setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' }))} 
-            onUpdateAppTheme={(t) => {
-              setSettings(s => ({ ...s, appTheme: t }));
-              addNotification({ type: 'Activity', title: 'Theme Applied', message: `Interface switched to ${t}.`, severity: 'info' });
-            }} 
-            onUpdateCurrency={(c) => {
-              setSettings(s => ({ ...s, currency: c }));
-              addNotification({ type: 'Activity', title: 'Currency Changed', message: `Values now displaying in ${c}.`, severity: 'info' });
-            }} 
-            onUpdateDataFilter={(f) => {
-              setSettings(s => ({ ...s, dataFilter: f }));
-              addNotification({ type: 'Activity', title: 'View Filtered', message: `Displaying ${f} entries only.`, severity: 'info' });
-            }} 
-            onUpdateSplit={(split) => {
-              setSettings(s => ({ ...s, split }));
-              addNotification({ type: 'Activity', title: 'Budget Updated', message: 'Allocation targets synchronized.', severity: 'success' });
-            }} 
-            onUpdateBaseIncome={(income) => {
-              setSettings(s => ({ ...s, monthlyIncome: income }));
-              addNotification({ type: 'Activity', title: 'Base Updated', message: `Monthly expectation set to ${getCurrencySymbol(settings.currency)}${income.toLocaleString()}`, severity: 'info' });
-            }} 
-            onSync={handleCloudSync} isSyncing={isSyncing} onLoadMockData={handleLoadMockData} onClearExpenses={() => { setExpenses([]); setIncomes([]); setWealthItems([]); addNotification({ type: 'Activity', title: 'History Cleared', message: 'All transactions have been purged.', severity: 'warning' }); }} 
-          />}
+          {currentView === 'Dashboard' && <Dashboard expenses={expenses} incomes={incomes} wealthItems={wealthItems} settings={settings} user={user} onCategorizeClick={() => setIsCategorizing(true)} onConfirmExpense={(id, cat) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, category: cat, isConfirmed: true } : e))} onSmartAdd={() => {}} viewDate={viewDate} onMonthChange={(d) => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + d, 1))} onGoToDate={(y, m) => setViewDate(new Date(y, m, 1))} />}
+          {currentView === 'Budget' && <BudgetPlanner budgetItems={budgetItems} recurringItems={recurringItems} expenses={expenses} settings={settings} onAddBudget={handleAddBudget} onDeleteBudget={handleDeleteBudget} viewDate={viewDate} />}
+          {currentView === 'Accounts' && <Accounts wealthItems={wealthItems} settings={settings} onUpdateWealth={handleUpdateWealth} onDeleteWealth={handleDeleteWealth} onAddWealth={handleAddWealth} />}
+          {currentView === 'Transactions' && <Transactions expenses={expenses} incomes={incomes} wealthItems={wealthItems} settings={settings} onDeleteExpense={handleDeleteExpense} onDeleteIncome={handleDeleteIncome} onDeleteWealth={handleDeleteWealth} onConfirm={(id, cat) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, category: cat, isConfirmed: true } : e))} onUpdateExpense={handleUpdateExpense} onEditRecord={(r) => { triggerHaptic(); setRecordToEdit(r); setIsAddingRecord(true); }} onAddBulk={(n) => setExpenses(p => [...p, ...n.map(x => ({ ...x, id: Math.random().toString(36).substring(2, 11), isConfirmed: true }))])} viewDate={viewDate} onMonthChange={(d) => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + d, 1))} onGoToDate={(y, m) => setViewDate(new Date(y, m, 1))} addNotification={addNotification} />}
+          {currentView === 'Profile' && <Settings settings={settings} user={user} onLogout={handleLogout} onReset={() => { triggerHaptic(30); localStorage.removeItem(STORAGE_KEY); location.reload();}} onToggleTheme={() => { triggerHaptic(); setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' })); }} onUpdateAppTheme={(t) => { triggerHaptic(); setSettings(s => ({ ...s, appTheme: t })); }} onUpdateCurrency={(c) => setSettings(s => ({ ...s, currency: c }))} onUpdateDataFilter={(f) => { triggerHaptic(); setSettings(s => ({ ...s, dataFilter: f })); }} onUpdateSplit={(split) => setSettings(s => ({ ...s, split }))} onUpdateBaseIncome={(income) => setSettings(s => ({ ...s, monthlyIncome: Math.round(income) }))} onSync={handleCloudSync} onExport={() => {}} onImport={() => {}} isSyncing={isSyncing} onLoadMockData={handleLoadMockData} onClearExpenses={() => { triggerHaptic(20); setExpenses([]); setRecurringItems([]); addNotification({ type: 'Activity', title: 'History Flushed', message: 'Transaction history has been permanently cleared.', severity: 'warning' }); }} />}
         </div>
       </main>
 
-      <Navbar currentView={currentView} remainingPercentage={remainingPercentage} onViewChange={(v) => { if(v === 'Add') { setRecordToEdit(null); setIsAddingRecord(true); } else { setCurrentView(v); } }} />
-      {isAddingRecord && <AddRecord 
-        settings={{ ...settings, monthlyIncome: currentMonthIncome }} 
-        onAdd={handleAddExpense} onAddIncome={handleAddIncome} onAddWealth={handleAddWealth}
-        onUpdateExpense={handleUpdateExpense} onUpdateIncome={handleUpdateIncome} onUpdateWealth={handleUpdateWealth}
-        onCancel={() => { setIsAddingRecord(false); setRecordToEdit(null); }} initialData={recordToEdit} 
-      />}
-      {isCategorizing && <CategorizationModal settings={{ ...settings, monthlyIncome: currentMonthIncome }} expenses={expenses.filter(e => !e.isConfirmed)} onConfirm={(id, cat) => {
-        setExpenses(prev => prev.map(e => e.id === id ? { ...e, category: cat, isConfirmed: true } : e));
-      }} onClose={() => setIsCategorizing(false)} />}
-      {isShowingNotifications && <NotificationPane notifications={notifications} onClose={() => setIsShowingNotifications(false)} onClear={handleClearNotifications} />}
-      
-      {/* Version Log Modal */}
-      {isShowingVersionLog && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 backdrop-blur-md bg-black/40">
-          <div className="bg-white dark:bg-slate-900 w-full max-sm rounded-[40px] shadow-2xl overflow-hidden border border-white/10 animate-slide-up">
-            <div className="p-8 space-y-8">
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tighter">v1.0 Stable</h2>
-                  <p className="text-[10px] font-black text-brand-primary uppercase tracking-[0.25em]">Release Notes</p>
-                </div>
-                <button onClick={() => setIsShowingVersionLog(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400">
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="space-y-5">
-                {[
-                  { icon: Sparkles, title: 'AI Decisions', desc: 'Predictive analysis for big purchases using Gemini 3 Pro.' },
-                  { icon: Zap, title: 'Smart Sync', desc: 'Real-time transaction extraction from SMS/text clipboard.' },
-                  { icon: Globe, title: 'Cloud Portal', desc: 'Secure Google Drive backups for cross-device wealth tracking.' },
-                  { icon: Wallet, title: 'Net Worth', desc: 'Combined asset & liability management with growth charts.' },
-                  { icon: ShieldCheck, title: 'Rule Engine', desc: 'Automated merchant-to-category mapping system.' }
-                ].map((f, i) => (
-                  <div key={i} className="flex gap-4 group">
-                    <div className="flex-none p-3 bg-slate-50 dark:bg-slate-800 rounded-2xl text-brand-primary group-hover:scale-110 transition-transform">
-                      <f.icon size={18} />
-                    </div>
-                    <div>
-                      <h4 className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-wider">{f.title}</h4>
-                      <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400 leading-relaxed mt-1">{f.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button 
-                onClick={() => setIsShowingVersionLog(false)}
-                className="w-full py-4 bg-slate-900 dark:bg-indigo-600 text-white font-black rounded-3xl text-xs uppercase tracking-[0.2em] shadow-xl hover:opacity-90 active:scale-95 transition-all"
-              >
-                Continue Exploring
-              </button>
-            </div>
-          </div>
-        </div>
+      <Navbar currentView={currentView} remainingPercentage={remainingPercentage} onViewChange={(v) => { triggerHaptic(); if(v === 'Add') { setRecordToEdit(null); setIsAddingRecord(true); } else { setCurrentView(v); } }} />
+      {isAddingRecord && (
+        <AddRecord 
+          settings={settings} wealthItems={wealthItems} expenses={expenses}
+          onAdd={handleAddExpense} onAddIncome={handleAddIncome} 
+          onTransfer={handleTransfer}
+          onUpdateExpense={handleUpdateExpense}
+          onUpdateIncome={handleUpdateIncome}
+          onCancel={() => { triggerHaptic(); setIsAddingRecord(false); setRecordToEdit(null); }} 
+          initialData={recordToEdit} 
+        />
       )}
+      {isCategorizing && <CategorizationModal settings={settings} expenses={expenses.filter(e => !e.isConfirmed)} onConfirm={(id, cat) => setExpenses(prev => prev.map(e => e.id === id ? { ...e, category: cat, isConfirmed: true } : e))} onClose={() => { triggerHaptic(); setIsCategorizing(false); }} />}
+      {isShowingNotifications && <NotificationPane notifications={notifications} onClose={() => { triggerHaptic(); setIsShowingNotifications(false); }} onClear={handleClearNotifications} />}
+      {isShowingVersionLog && <VersionLog onClose={() => { triggerHaptic(); setIsShowingVersionLog(false); }} />}
     </div>
   );
 };

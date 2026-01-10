@@ -2,6 +2,7 @@
 import React from 'react';
 import { View } from '../types';
 import { Plus } from 'lucide-react';
+import { triggerHaptic } from '../utils/haptics';
 
 interface NavbarProps {
   currentView: View;
@@ -12,10 +13,15 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ currentView, remainingPercentage, onViewChange }) => {
   const spentPercentage = Math.max(0, Math.min(100, 100 - remainingPercentage));
 
+  const handleClick = () => {
+    triggerHaptic(20);
+    onViewChange('Add');
+  };
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none pb-6 px-6 flex justify-end">
       <button
-        onClick={() => onViewChange('Add')}
+        onClick={handleClick}
         className="pointer-events-auto flex items-center justify-center transition-all active:scale-90 hover:scale-105 group relative"
       >
         <div className="relative">

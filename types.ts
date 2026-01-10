@@ -1,11 +1,24 @@
-
 export type Category = 'Needs' | 'Wants' | 'Savings' | 'Uncategorized';
 export type Frequency = 'None' | 'Weekly' | 'Monthly' | 'Yearly';
 export type IncomeType = 'Salary' | 'Freelance' | 'Investment' | 'Gift' | 'Other';
-export type AppTheme = 'Standard' | 'Spiderman' | 'CaptainAmerica' | 'Naruto';
+export type AppTheme = 'Spiderman' | 'CaptainAmerica' | 'Naruto';
+export type PaymentMethod = 'UPI' | 'Card' | 'Cash' | 'Net Banking' | 'Other';
+export type DensityLevel = 'Normal' | 'Simple' | 'Compact';
 
 export type WealthType = 'Investment' | 'Liability';
-export type WealthCategory = 'Stock' | 'Mutual Fund' | 'Crypto' | 'Gold' | 'Real Estate' | 'Loan' | 'Credit Card' | 'Other';
+export type WealthCategory = 
+  | 'Stock' | 'Mutual Fund' | 'Crypto' | 'Gold' | 'Real Estate' 
+  | 'Loan' | 'Credit Card' | 'Other'
+  | 'Checking Account' | 'Savings Account' | 'Cash';
+
+export interface BudgetItem {
+  id: string;
+  name: string;
+  amount: number;
+  category: Category;
+  subCategory?: string;
+  isRecurringLink?: string; // Links to a recurringItem id if it's a fixed expense
+}
 
 export interface Expense {
   id: string;
@@ -13,6 +26,7 @@ export interface Expense {
   date: string;
   category: Category;
   subCategory?: string;
+  paymentMethod?: PaymentMethod;
   note?: string;
   merchant?: string;
   isConfirmed: boolean;
@@ -24,7 +38,9 @@ export interface Income {
   amount: number;
   date: string;
   type: IncomeType;
+  paymentMethod?: PaymentMethod;
   note?: string;
+  targetAccountId?: string; 
   isMock?: boolean;
 }
 
@@ -34,6 +50,7 @@ export interface WealthItem {
   category: WealthCategory;
   name: string;
   value: number;
+  limit?: number;
   date: string;
   isMock?: boolean;
 }
@@ -79,6 +96,7 @@ export interface UserSettings {
   currency: string;
   dataFilter: 'all' | 'user' | 'mock';
   lastSynced?: string;
+  density?: DensityLevel;
 }
 
 export interface UserProfile {
@@ -89,4 +107,4 @@ export interface UserProfile {
   accessToken?: string;
 }
 
-export type View = 'Dashboard' | 'Expenses' | 'Rules' | 'Profile' | 'Add' | 'Auth' | 'Wealth';
+export type View = 'Dashboard' | 'Transactions' | 'Profile' | 'Add' | 'Auth' | 'Accounts' | 'Budget';

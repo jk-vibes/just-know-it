@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Expense, Category, UserSettings } from '../types';
 import { CATEGORY_COLORS, getCurrencySymbol } from '../constants';
 import { Check, ArrowRight, Smartphone, Building2 } from 'lucide-react';
+import { triggerHaptic } from '../utils/haptics';
 
 interface CategorizationModalProps {
   settings: UserSettings;
@@ -16,6 +17,12 @@ const CategorizationModal: React.FC<CategorizationModalProps> = ({ settings, exp
   const current = expenses[currentIndex];
   const currencySymbol = getCurrencySymbol(settings.currency);
 
+  const handleSelection = (cat: Category) => {
+    triggerHaptic();
+    onConfirm(current.id, cat);
+    setCurrentIndex(currentIndex + 1);
+  };
+
   if (!current) {
     return (
       <div className="fixed inset-0 bg-white dark:bg-slate-900 z-[70] flex flex-col items-center justify-center p-6 text-center animate-slide-up">
@@ -25,8 +32,8 @@ const CategorizationModal: React.FC<CategorizationModalProps> = ({ settings, exp
         <h2 className="text-2xl font-extrabold mb-2 text-slate-900 dark:text-white">All Done!</h2>
         <p className="text-slate-500 text-sm mb-8 max-w-[240px]">You've successfully categorized all pending transactions.</p>
         <button 
-          onClick={onClose}
-          className="w-full max-w-xs bg-indigo-600 text-white font-extrabold py-4 rounded-[24px] shadow-xl shadow-indigo-100 dark:shadow-none"
+          onClick={() => { triggerHaptic(); onClose(); }}
+          className="w-full max-w-xs bg-indigo-600 text-white font-extrabold py-4 rounded-[24px] shadow-xl shadow-indigo-100 dark:shadow-none active:scale-95 transition-transform"
         >
           Back to Dashboard
         </button>
@@ -54,18 +61,15 @@ const CategorizationModal: React.FC<CategorizationModalProps> = ({ settings, exp
         <h2 className="text-2xl font-extrabold text-center mb-6 text-slate-900 dark:text-white">{current.merchant || 'Unidentified'}</h2>
         
         <div className="text-4xl font-extrabold text-slate-900 dark:text-white mb-10">
-          {currencySymbol}{current.amount.toLocaleString()}
+          {currencySymbol}{Math.round(current.amount).toLocaleString()}
         </div>
 
         <div className="w-full space-y-2.5">
           {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
             <button
               key={cat}
-              onClick={() => {
-                onConfirm(current.id, cat);
-                setCurrentIndex(currentIndex + 1);
-              }}
-              className="w-full flex items-center justify-between p-4 rounded-[24px] border-2 border-slate-100 dark:border-slate-800 hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all group"
+              onClick={() => handleSelection(cat)}
+              className="w-full flex items-center justify-between p-4 rounded-[24px] border-2 border-slate-100 dark:border-slate-800 hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all active:scale-[0.98] group"
             >
               <div className="flex items-center gap-3">
                 <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
@@ -79,8 +83,8 @@ const CategorizationModal: React.FC<CategorizationModalProps> = ({ settings, exp
 
       <div className="p-4">
         <button 
-          onClick={onClose}
-          className="w-full text-slate-400 font-bold text-xs hover:text-slate-600 py-3"
+          onClick={() => { triggerHaptic(); onClose(); }}
+          className="w-full text-slate-400 font-bold text-xs hover:text-slate-600 py-3 active:scale-95 transition-transform"
         >
           Skip for now
         </button>

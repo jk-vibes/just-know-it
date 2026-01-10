@@ -1,59 +1,108 @@
-
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { Expense, UserSettings, Category } from "../types";
+import { Expense, UserSettings, Category, WealthItem } from "../types";
 
-// Initialize Gemini API with the required named parameter
+// Initialize Gemini API
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Simple cache to prevent redundant calls
-const insightCache: Record<string, any> = {};
+// Global queue to prevent concurrent requests (reduces RPM spikes)
+let isProcessing = false;
+const queue: (() => Promise<void>)[] = [];
 
-/**
- * Generates a simple hash for the expense data to check for changes
- */
-function getExpensesHash(expenses: Expense[], settings: UserSettings): string {
-  const confirmed = expenses.filter(e => e.isConfirmed).map(e => `${e.id}-${e.amount}-${e.category}`);
-  return `${settings.currency}-${settings.monthlyIncome}-${confirmed.join('|')}`;
+async function processQueue() {
+  if (isProcessing || queue.length === 0) return;
+  isProcessing = true;
+  const task = queue.shift();
+  if (task) await task();
+  isProcessing = false;
+  processQueue();
+}
+
+const INSIGHT_CACHE_KEY = 'jk_ai_insights_cache';
+
+function getPersistentCache(): Record<string, any> {
+  try {
+    const cached = localStorage.getItem(INSIGHT_CACHE_KEY);
+    return cached ? JSON.parse(cached) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setPersistentCache(hash: string, data: any) {
+  try {
+    const cache = getPersistentCache();
+    cache[hash] = { data, timestamp: Date.now() };
+    localStorage.setItem(INSIGHT_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.warn("Cache write failed", e);
+  }
 }
 
 /**
- * Wrapper for API calls with exponential backoff to handle quota limits gracefully
+ * Generates a stable hash for the current financial state.
  */
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
-  try {
-    return await fn();
-  } catch (error: any) {
-    const isRetryable = error?.message?.includes('429') || error?.message?.includes('500') || error?.message?.includes('RESOURCE_EXHAUSTED');
-    if (isRetryable && retries > 0) {
-      console.warn(`Gemini Quota/Error hit. Retrying in ${delay}ms... (${retries} left)`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return withRetry(fn, retries - 1, delay * 2);
-    }
-    throw error;
-  }
+export function getExpensesHash(expenses: Expense[], settings: UserSettings): string {
+  const confirmed = expenses
+    .filter(e => e.isConfirmed)
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map(e => `${e.id}-${Math.round(e.amount)}`);
+  return `v4-rounded-${settings.currency}-${Math.round(settings.monthlyIncome)}-${confirmed.length}-${confirmed.slice(-5).join('|')}`;
+}
+
+/**
+ * Robust retry logic with exponential backoff and jitter for rate limits.
+ */
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 15000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const execute = async () => {
+      try {
+        const result = await fn();
+        resolve(result);
+      } catch (error: any) {
+        const errorStr = (error?.message || "").toUpperCase();
+        const isRateLimit = errorStr.includes('429') || errorStr.includes('RESOURCE_EXHAUSTED') || errorStr.includes('QUOTA');
+        
+        if (isRateLimit && retries > 0) {
+          const jitter = Math.random() * 3000;
+          const waitTime = delay + jitter;
+          console.warn(`Gemini Quota Reached. Retrying task in ${Math.round(waitTime/1000)}s...`);
+          await new Promise(r => setTimeout(r, waitTime));
+          queue.push(() => withRetry(fn, retries - 1, delay * 2).then(resolve).catch(reject));
+          processQueue();
+        } else {
+          reject(error);
+        }
+      }
+    };
+
+    queue.push(execute);
+    processQueue();
+  });
 }
 
 export async function getBudgetInsights(expenses: Expense[], settings: UserSettings) {
   const hash = getExpensesHash(expenses, settings);
-  if (insightCache[hash]) return insightCache[hash];
+  const cache = getPersistentCache();
+  
+  if (cache[hash] && (Date.now() - cache[hash].timestamp < 86400000)) {
+    return cache[hash].data;
+  }
 
   const summary = expenses.reduce((acc, exp) => {
     if (exp.isConfirmed) {
-      acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
+      acc[exp.category] = (acc[exp.category] || 0) + Math.round(exp.amount);
     }
     return acc;
   }, {} as Record<string, number>);
 
   const prompt = `
-    Context: Monthly Income ${settings.monthlyIncome} ${settings.currency}.
-    Budget Targets: Needs ${settings.split.Needs}%, Wants ${settings.split.Wants}%, Savings ${settings.split.Savings}%.
-    Current Spending: Needs ${summary.Needs || 0}, Wants ${summary.Wants || 0}, Savings ${summary.Savings || 0}.
-    Currency is ${settings.currency}.
-    Provide 3 short, actionable financial tips based on this data. Keep it concise.
+    Context: Monthly Income ${Math.round(settings.monthlyIncome)} ${settings.currency}.
+    Current spend: Needs ${summary.Needs || 0}, Wants ${summary.Wants || 0}, Savings ${summary.Savings || 0}.
+    Targets: ${settings.split.Needs}% Needs, ${settings.split.Wants}% Wants, ${settings.split.Savings}% Savings.
+    Output 3 actionable tips for wealth building in JSON array of {tip, impact}.
   `;
 
   try {
-    // Basic text tasks like tips use gemini-3-flash-preview
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -66,86 +115,134 @@ export async function getBudgetInsights(expenses: Expense[], settings: UserSetti
             properties: {
               tip: { type: Type.STRING },
               impact: { type: Type.STRING }
-            }
+            },
+            required: ["tip", "impact"]
           }
         }
       }
     }));
     
-    // Use .text property directly as per latest SDK guidelines
     const results = JSON.parse(response.text || '[]');
-    insightCache[hash] = results; 
-    return results;
-  } catch (error: any) {
-    console.error("Gemini Error:", error);
-    if (error?.message?.includes('429')) {
-      return [{
-        tip: "AI Insights are currently on a break due to high demand. Please try again in a few minutes.",
-        impact: "System Maintenance"
-      }];
+    if (results.length > 0) {
+      setPersistentCache(hash, results);
     }
+    return results;
+  } catch (error) {
+    console.error("Gemini Insights Error:", error);
     return null;
   }
 }
 
-export async function getDecisionAdvice(expenses: Expense[], settings: UserSettings, queryType: 'Vacation' | 'BigPurchase', estimatedCost: number) {
-  const summary = expenses.reduce((acc, exp) => {
-    if (exp.isConfirmed) {
-      acc[exp.category] = (acc[exp.category] || 0) + exp.amount;
-    }
-    return acc;
-  }, {} as Record<Category, number>);
-
+export async function auditTransaction(expense: Expense, currency: string) {
   const prompt = `
-    Decision Analysis Request:
-    User wants to plan a ${queryType} costing ${estimatedCost} ${settings.currency}.
-    Monthly Income: ${settings.monthlyIncome} ${settings.currency}.
-    Current Spending (Needs/Wants/Savings): ${summary.Needs || 0}/${summary.Wants || 0}/${summary.Savings || 0}.
-    Budget Rule: 50/30/20 (${settings.split.Needs}/${settings.split.Wants}/${settings.split.Savings}).
+    Audit this transaction:
+    Merchant: ${expense.merchant || 'Unknown'}
+    Note: ${expense.note || 'None'}
+    Amount: ${Math.round(expense.amount)} ${currency}
+    Current Category: ${expense.category}
     
-    Task: Evaluate if they can afford it. 
-    Return: 
-    1. A status (Green: Safe, Yellow: Caution, Red: High Risk)
-    2. Affordability Score (0-100)
-    3. Action Plan (e.g., "Cut Wants spending by 10% for 3 months")
-    4. Estimated wait time to save comfortably.
+    Identify if the category is correct or if this looks like an anomaly.
+    Return JSON: {
+      isCorrect: boolean,
+      suggestedCategory: string (Needs/Wants/Savings),
+      insight: string (max 15 words),
+      isAnomaly: boolean
+    }
   `;
 
   try {
-    // Complex reasoning tasks use gemini-3-pro-preview for higher accuracy
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            status: { type: Type.STRING, description: "Green, Yellow, or Red" },
+            isCorrect: { type: Type.BOOLEAN },
+            suggestedCategory: { type: Type.STRING },
+            insight: { type: Type.STRING },
+            isAnomaly: { type: Type.BOOLEAN }
+          },
+          required: ["isCorrect", "suggestedCategory", "insight", "isAnomaly"]
+        }
+      }
+    }));
+    return JSON.parse(response.text || '{}');
+  } catch (error) {
+    console.error("Audit Error:", error);
+    return null;
+  }
+}
+
+export async function getDecisionAdvice(
+  expenses: Expense[], 
+  wealthItems: WealthItem[], 
+  settings: UserSettings, 
+  queryType: string, 
+  itemName: string, 
+  estimatedCost: number
+) {
+  const summary = expenses.reduce((acc, exp) => {
+    if (exp.isConfirmed) {
+      acc[exp.category] = (acc[exp.category] || 0) + Math.round(exp.amount);
+    }
+    return acc;
+  }, {} as Record<Category, number>);
+
+  const assets = wealthItems.filter(i => i.type === 'Investment').reduce((sum, i) => sum + i.value, 0);
+  const liquid = wealthItems.filter(i => ['Checking Account', 'Savings Account', 'Cash'].includes(i.category)).reduce((sum, i) => sum + i.value, 0);
+
+  const prompt = `
+    Affordability check for "${itemName}" costing ${Math.round(estimatedCost)} ${settings.currency}.
+    Monthly Income: ${Math.round(settings.monthlyIncome)}. 
+    Spend summary: Needs ${summary.Needs || 0}, Wants ${summary.Wants || 0}, Savings ${summary.Savings || 0}.
+    Net Portfolio: Assets ${Math.round(assets)}, Liquid Cash ${Math.round(liquid)}.
+    
+    Return JSON with status, whole number score (0-100), reasoning, actionPlan, waitTime, and whole number impactPercentage.
+  `;
+
+  try {
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            status: { type: Type.STRING },
             score: { type: Type.NUMBER },
             reasoning: { type: Type.STRING },
             actionPlan: { type: Type.ARRAY, items: { type: Type.STRING } },
-            waitTime: { type: Type.STRING }
-          }
+            waitTime: { type: Type.STRING },
+            impactPercentage: { type: Type.NUMBER }
+          },
+          required: ["status", "score", "reasoning", "actionPlan", "waitTime", "impactPercentage"]
         }
       }
     }));
     return JSON.parse(response.text || '{}');
   } catch (error) {
     console.error("Gemini Decision Error:", error);
-    return null;
+    return { 
+      status: 'Yellow', 
+      score: 50, 
+      reasoning: 'AI assessment interrupted. Manual review of your savings buffer is recommended.', 
+      actionPlan: ["Review cash on hand", "Check upcoming bills"], 
+      waitTime: "Manual Audit",
+      impactPercentage: 0
+    };
   }
 }
 
 export async function parseTransactionText(text: string, currency: string): Promise<{ amount: number, merchant: string, category: Category, subCategory: string, date: string } | null> {
   const prompt = `
-    Analyze this transaction SMS/text: "${text}".
-    Currency context: ${currency}.
-    Extract amount, merchant, date (YYYY-MM-DD), high-level category ('Needs', 'Wants', 'Savings'), and subCategory.
+    Extract {amount (integer), merchant, category(Needs/Wants/Savings), subCategory, date(YYYY-MM-DD)} from: "${text}".
+    Currency: ${currency}.
   `;
 
   try {
-    // Text extraction tasks use gemini-3-flash-preview
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -167,8 +264,8 @@ export async function parseTransactionText(text: string, currency: string): Prom
     const result = JSON.parse(response.text || '{}');
     const validCategories: Category[] = ['Needs', 'Wants', 'Savings', 'Uncategorized'];
     return {
-      amount: result.amount || 0,
-      merchant: result.merchant || 'Unknown Merchant',
+      amount: Math.round(Math.abs(result.amount || 0)),
+      merchant: result.merchant || 'Merchant',
       category: validCategories.includes(result.category) ? result.category : 'Uncategorized',
       subCategory: result.subCategory || 'General',
       date: result.date || new Date().toISOString().split('T')[0]
@@ -181,18 +278,11 @@ export async function parseTransactionText(text: string, currency: string): Prom
 
 export async function parseBulkTransactions(text: string, currency: string): Promise<Array<{ amount: number, merchant: string, category: Category, subCategory: string, date: string }>> {
   const prompt = `
-    Instructions: Extract all actual financial expense/spending/payment transactions from the following text.
-    Look for keywords like: "Spent Rs.", "Sent Rs.", "PAYMENT ALERT!", "INR ... deducted", "debited", "Rs. ... paid".
-    Ignore: Marketing messages, OTPs, login alerts, balance reminders, and refunded transactions.
-    
-    Source Text: 
-    ${text}
-    
-    Return a JSON array of objects with amount, merchant (extract from "To", "At", "towards"), date (YYYY-MM-DD), category (Needs/Wants/Savings), and subCategory.
+    Parse text into integer amounts, merchants, dates, and categories (Needs/Wants/Savings).
+    Return JSON array. Text: "${text}"
   `;
 
   try {
-    // Bulk extraction tasks use gemini-3-flash-preview
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
@@ -218,8 +308,8 @@ export async function parseBulkTransactions(text: string, currency: string): Pro
     const validCategories: Category[] = ['Needs', 'Wants', 'Savings', 'Uncategorized'];
 
     return results.map((r: any) => ({
-      amount: r.amount || 0,
-      merchant: r.merchant || 'Unknown',
+      amount: Math.round(Math.abs(r.amount || 0)),
+      merchant: r.merchant || 'Merchant',
       category: validCategories.includes(r.category) ? r.category : 'Uncategorized',
       subCategory: r.subCategory || 'General',
       date: r.date || new Date().toISOString().split('T')[0]
@@ -227,5 +317,46 @@ export async function parseBulkTransactions(text: string, currency: string): Pro
   } catch (error) {
     console.error("Gemini Bulk Parse Error:", error);
     return [];
+  }
+}
+
+export async function predictBudgetCategory(name: string): Promise<{ category: Category, subCategory: string } | null> {
+  const prompt = `
+    Based on the budget item name "${name}", predict the most appropriate finance category (Needs/Wants/Savings) and a specific sub-category name.
+    Examples:
+    - "School fees" -> {category: "Needs", subCategory: "Education"}
+    - "Mobile bill" -> {category: "Needs", subCategory: "Utilities"}
+    - "Netflix" -> {category: "Wants", subCategory: "Subscriptions"}
+    - "SIP" -> {category: "Savings", subCategory: "Investment"}
+    
+    Return JSON with fields: category, subCategory.
+  `;
+
+  try {
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            category: { type: Type.STRING },
+            subCategory: { type: Type.STRING }
+          },
+          required: ["category", "subCategory"]
+        }
+      }
+    }));
+    
+    const result = JSON.parse(response.text || '{}');
+    const validCategories: Category[] = ['Needs', 'Wants', 'Savings', 'Uncategorized'];
+    return {
+      category: validCategories.includes(result.category) ? result.category : 'Needs',
+      subCategory: result.subCategory || 'General'
+    };
+  } catch (error) {
+    console.error("Gemini Budget Prediction Error:", error);
+    return null;
   }
 }

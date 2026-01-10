@@ -1,5 +1,5 @@
 
-import { Category } from './types';
+import { Category, PaymentMethod } from './types';
 
 export const CATEGORY_COLORS: Record<Category, string> = {
   Needs: '#ff3d71',     // Vibrant Electric Rose
@@ -7,6 +7,15 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   Savings: '#00d68f',   // Vivid Emerald
   Uncategorized: '#94a3b8' // Slate
 };
+
+export const SUB_CATEGORIES: Record<Category, string[]> = {
+  Needs: ['Rent/Mortgage', 'Groceries', 'Utilities', 'Fuel/Transport', 'Health/Insurance', 'Education', 'Debt Interest'],
+  Wants: ['Dining', 'Shopping', 'Travel', 'Entertainment', 'Subscription', 'Gifts', 'Hobbies'],
+  Savings: ['SIP/Mutual Fund', 'Emergency Fund', 'Stocks', 'Gold', 'Real Estate', 'Crypto', 'Cash Stash'],
+  Uncategorized: ['General', 'Transfer', 'Correction']
+};
+
+export const PAYMENT_METHODS: PaymentMethod[] = ['UPI', 'Card', 'Cash', 'Net Banking', 'Other'];
 
 export const DEFAULT_SPLIT = {
   Needs: 50,

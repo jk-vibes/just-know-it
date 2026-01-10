@@ -18,7 +18,38 @@ const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
         {/* Brand Icon */}
         <div className="relative inline-block">
           <div className="bg-brand-primary/10 dark:bg-white/10 p-6 rounded-[32px] w-24 h-24 mx-auto flex items-center justify-center text-brand-primary dark:text-white transition-colors">
-            <Wallet size={48} strokeWidth={1.5} />
+            <svg 
+              width="48" 
+              height="48" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="drop-shadow-sm"
+            >
+              <path 
+                d="M4 8C4 7.44772 4.44772 7 5 7H19C19.5523 7 20 7.44772 20 8V20C20 21.1046 19.1046 22 18 22H6C4.89543 22 4 21.1046 4 20V8Z" 
+                fill="currentColor" 
+                className="text-brand-primary"
+              />
+              <path 
+                d="M8 7V5C8 3.89543 8.89543 3 10 3H14C15.1046 3 16 3.89543 16 5V7" 
+                stroke="currentColor" 
+                className="text-brand-primary"
+                strokeWidth="2" 
+                strokeLinecap="round" 
+              />
+              <text 
+                x="12" 
+                y="17" 
+                fontSize="6" 
+                fontWeight="900" 
+                textAnchor="middle" 
+                fill="white" 
+                style={{ fontFamily: 'Plus Jakarta Sans' }}
+              >
+                JK
+              </text>
+            </svg>
           </div>
           <div className="absolute -top-2 -right-2 bg-brand-accent text-white p-2 rounded-full shadow-lg">
             <Sparkles size={16} />
