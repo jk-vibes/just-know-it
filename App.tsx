@@ -19,7 +19,7 @@ import { syncToGoogleDrive, restoreFromGoogleDrive, BackupData } from './service
 import { triggerHaptic } from './utils/haptics';
 import { getTacticalStrategy } from './services/geminiService';
 
-const STORAGE_KEY = 'jk_budget_data_whole_num_v8';
+const STORAGE_KEY = 'jk_budget_data_whole_num_v9';
 
 const INITIAL_SETTINGS: UserSettings = {
   monthlyIncome: 300000,
@@ -30,7 +30,8 @@ const INITIAL_SETTINGS: UserSettings = {
   isCloudSyncEnabled: false,
   currency: 'INR',
   dataFilter: 'all',
-  density: 'Compact'
+  density: 'Compact',
+  hasLoadedMockData: false
 };
 
 const calculateNextDueDate = (currentDate: string, frequency: Frequency): string => {
@@ -82,13 +83,15 @@ const App: React.FC = () => {
     setIncomes(prev => prev.filter(i => !i.isMock));
     setWealthItems(prev => prev.filter(w => !w.isMock));
     setBudgetItems(prev => prev.filter(b => !b.isMock));
-    // Also clear mock bills if they exist (none currently added in generateMockData but safe for future)
-    setBills(prev => prev.filter(b => !('isMock' in b && b.isMock)));
+    setBills(prev => prev.filter(b => !('isMock' in b && (b as any).isMock)));
+    
+    // Crucially, set the flag so we don't reload them on next app start
+    setSettings(prev => ({ ...prev, hasLoadedMockData: true }));
     
     addNotification({
       type: 'Activity',
-      title: 'Historical Cleanse Successful',
-      message: 'All simulated mock datasets have been permanently scrubbed from local memory.',
+      title: 'Database Scrubbed',
+      message: 'All simulated datasets have been removed. Local registry is now focused on user-originated entries.',
       severity: 'success'
     });
   }, [addNotification]);
@@ -147,21 +150,25 @@ const App: React.FC = () => {
     setSettings(prev => ({ ...prev, isOnboarded: true })); 
     setIsAuthenticated(true); 
     
-    // Automatically attempt cloud restore on login if access token exists
     if (profile.accessToken) {
       setIsSyncing(true);
-      const restored = await restoreFromGoogleDrive(profile.accessToken);
-      if (restored) {
-        setExpenses(restored.expenses);
-        setIncomes(restored.incomes);
-        setWealthItems(restored.wealthItems);
-        setBudgetItems(restored.budgetItems);
-        setBills(restored.bills);
-        setNotifications(restored.notifications);
-        setSettings(prev => ({ ...prev, ...restored.settings, lastSynced: restored.timestamp }));
-        addNotification({ type: 'AI', title: 'Identity Verified', message: 'Financial state synchronized with your secure Google cloud vault.', severity: 'success' });
+      try {
+        const restored = await restoreFromGoogleDrive(profile.accessToken);
+        if (restored) {
+          setExpenses(restored.expenses);
+          setIncomes(restored.incomes);
+          setWealthItems(restored.wealthItems);
+          setBudgetItems(restored.budgetItems);
+          setBills(restored.bills);
+          setNotifications(restored.notifications);
+          setSettings(prev => ({ ...prev, ...restored.settings, lastSynced: restored.timestamp }));
+          addNotification({ type: 'AI', title: 'Identity Verified', message: 'Financial state synchronized with your secure Google cloud vault.', severity: 'success' });
+        }
+      } catch (e) {
+        addNotification({ type: 'Activity', title: 'Vault Access Limited', message: 'Restoration failed. Starting with current local state.', severity: 'warning' });
+      } finally {
+        setIsSyncing(false);
       }
-      setIsSyncing(false);
     }
   };
 
@@ -278,6 +285,8 @@ const App: React.FC = () => {
       { id: 'b7', name: 'SIP Investment', amount: 50000, category: 'Savings', subCategory: 'SIP/Mutual Fund', isMock: true }
     ]);
 
+    setSettings(prev => ({ ...prev, hasLoadedMockData: true }));
+
     addNotification({
       type: 'Activity',
       title: 'H-D MOCK Data Initialized',
@@ -289,10 +298,15 @@ const App: React.FC = () => {
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     let hasFoundExisting = false;
+    let loadedSettings = INITIAL_SETTINGS;
+
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.settings) setSettings({ ...INITIAL_SETTINGS, ...parsed.settings });
+        if (parsed.settings) {
+          loadedSettings = { ...INITIAL_SETTINGS, ...parsed.settings };
+          setSettings(loadedSettings);
+        }
         if (parsed.expenses && parsed.expenses.length > 0) { setExpenses(parsed.expenses); hasFoundExisting = true; }
         if (parsed.incomes) setIncomes(parsed.incomes);
         if (parsed.wealthItems) setWealthItems(parsed.wealthItems);
@@ -303,7 +317,8 @@ const App: React.FC = () => {
       } catch (e) {}
     }
 
-    if (!hasFoundExisting) {
+    // Only load mock data if it hasn't been loaded before AND no existing data was found
+    if (!hasFoundExisting && !loadedSettings.hasLoadedMockData) {
       handleLoadMockData();
     }
     setIsLoading(false);

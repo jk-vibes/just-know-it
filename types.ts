@@ -114,6 +114,7 @@ export interface UserSettings {
   dataFilter: 'all' | 'user' | 'mock';
   lastSynced?: string;
   density?: DensityLevel;
+  hasLoadedMockData?: boolean;
 }
 
 export interface UserProfile {
