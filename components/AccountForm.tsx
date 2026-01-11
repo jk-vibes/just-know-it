@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { WealthItem, WealthType, WealthCategory, UserSettings } from '../types';
 import { getCurrencySymbol } from '../constants';
@@ -67,7 +66,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, o
         <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/30">
           <div>
             <h3 className="text-xs font-black uppercase tracking-widest dark:text-white">{isEditing ? 'Configure Account' : 'New Account'}</h3>
-            <p className="text-[8px] font-black text-slate-400 uppercase mt-0.5">Asset & Liability Registry</p>
+            <p className="text-[8px] font-black text-slate-400 uppercase mt-0.5">Account Registry</p>
           </div>
           <button onClick={onCancel} className="p-2 bg-white dark:bg-slate-800 rounded-xl text-slate-400"><X size={18} /></button>
         </div>

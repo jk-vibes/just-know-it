@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { 
   PieChart, Pie, Cell, ResponsiveContainer, 
   AreaChart, Area, XAxis, YAxis, BarChart, Bar,
-  Tooltip, Legend
+  Tooltip, Legend, LineChart, Line
 } from 'recharts';
 import { Expense, UserSettings, Category, Income, WealthItem, UserProfile } from '../types';
 import { CATEGORY_COLORS, getCurrencySymbol } from '../constants';
@@ -11,10 +11,11 @@ import {
   Sparkles, ShieldCheck, Zap, 
   Loader2, RefreshCcw, 
   Target, BarChart3, ListOrdered, 
-  Clock, Flame, Droplets, ArrowRight, CalendarDays
+  Clock, Flame, Droplets, ArrowRight, CalendarDays,
+  LineChart as LineChartIcon, ArrowLeftRight, Layers, BarChart as BarChartIcon
 } from 'lucide-react';
-import { getBudgetInsights, getExpensesHash } from '../services/geminiService';
 import { triggerHaptic } from '../utils/haptics';
+import { getBudgetInsights, getExpensesHash } from '../services/geminiService';
 
 interface DashboardProps {
   expenses: Expense[];
@@ -32,11 +33,13 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  expenses, incomes, wealthItems, settings, viewDate, onInsightsReceived
+  expenses, incomes, wealthItems, settings, viewDate, onInsightsReceived, user
 }) => {
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [insights, setInsights] = useState<{ tip: string, impact: string }[] | null>(null);
   const [insightError, setInsightError] = useState(false);
+  const [quarterlyChartStyle, setQuarterlyChartStyle] = useState<'stacked' | 'grouped'>('stacked');
+  const [momChartStyle, setMomChartStyle] = useState<'category' | 'total'>('category');
   
   const initialFetchRef = useRef(false);
   const lastHashRef = useRef<string>("");
@@ -83,7 +86,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     const totalIncome = monthlyIncomes.reduce((sum, i) => sum + i.amount, 0) || settings.monthlyIncome;
     const byCat = currentExps.reduce((acc, e) => { acc[e.category] = (acc[e.category] || 0) + e.amount; return acc; }, {} as Record<Category, number>);
     
-    // Efficiency Metrics
     const savingsRate = totalIncome > 0 ? Math.round(((totalIncome - spent) / totalIncome) * 100) : 0;
     const today = new Date();
     const isCurrentMonth = today.getMonth() === m && today.getFullYear() === y;
@@ -91,7 +93,6 @@ const Dashboard: React.FC<DashboardProps> = ({
     const dailyAvg = Math.round(spent / dayOfMonth);
     const burnDays = dailyAvg > 0 ? Math.round(wealthStats.liquid / dailyAvg) : Infinity;
 
-    // Top Merchants
     const merchantMap = currentExps.reduce((acc, e) => {
       const name = e.merchant || e.note || 'General';
       acc[name] = (acc[name] || 0) + e.amount;
@@ -124,6 +125,62 @@ const Dashboard: React.FC<DashboardProps> = ({
     }, {} as Record<Category, number>);
 
     return { total: Math.round(total), monthlyAvg: Math.round(monthlyAvg), byCat };
+  }, [expenses, viewDate]);
+
+  const quarterlyTrend = useMemo(() => {
+    const data = [];
+    for (let i = 2; i >= 0; i--) {
+      const d = new Date(viewDate.getFullYear(), viewDate.getMonth() - i, 1);
+      const m = d.getMonth();
+      const y = d.getFullYear();
+      const monthExps = expenses.filter(e => e.isConfirmed && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y);
+      
+      data.push({
+        month: d.toLocaleDateString(undefined, { month: 'short' }),
+        Needs: Math.round(monthExps.filter(e => e.category === 'Needs').reduce((s, e) => s + e.amount, 0)),
+        Wants: Math.round(monthExps.filter(e => e.category === 'Wants').reduce((s, e) => s + e.amount, 0)),
+        Savings: Math.round(monthExps.filter(e => e.category === 'Savings').reduce((s, e) => s + e.amount, 0)),
+      });
+    }
+    return data;
+  }, [expenses, viewDate]);
+
+  const momData = useMemo(() => {
+    const currentMonth = viewDate.getMonth();
+    const currentYear = viewDate.getFullYear();
+    const curExps = expenses.filter(e => e.isConfirmed && new Date(e.date).getMonth() === currentMonth && new Date(e.date).getFullYear() === currentYear);
+
+    const prevDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
+    const prevMonth = prevDate.getMonth();
+    const prevYear = prevDate.getFullYear();
+    const prevExps = expenses.filter(e => e.isConfirmed && new Date(e.date).getMonth() === prevMonth && new Date(e.date).getFullYear() === prevYear);
+
+    const categories: Category[] = ['Needs', 'Wants', 'Savings'];
+    
+    // Grouped by Category (for comparison toggle)
+    const categoryView = categories.map(cat => ({
+      category: cat,
+      Previous: Math.round(prevExps.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0)),
+      Current: Math.round(curExps.filter(e => e.category === cat).reduce((s, e) => s + e.amount, 0))
+    }));
+
+    // Stacked by Month (for total composition toggle)
+    const totalView = [
+      {
+        name: 'Prev',
+        Needs: Math.round(prevExps.filter(e => e.category === 'Needs').reduce((s, e) => s + e.amount, 0)),
+        Wants: Math.round(prevExps.filter(e => e.category === 'Wants').reduce((s, e) => s + e.amount, 0)),
+        Savings: Math.round(prevExps.filter(e => e.category === 'Savings').reduce((s, e) => s + e.amount, 0)),
+      },
+      {
+        name: 'Cur',
+        Needs: Math.round(curExps.filter(e => e.category === 'Needs').reduce((s, e) => s + e.amount, 0)),
+        Wants: Math.round(curExps.filter(e => e.category === 'Wants').reduce((s, e) => s + e.amount, 0)),
+        Savings: Math.round(curExps.filter(e => e.category === 'Savings').reduce((s, e) => s + e.amount, 0)),
+      }
+    ];
+
+    return { categoryView, totalView };
   }, [expenses, viewDate]);
 
   const weeklyData = useMemo(() => {
@@ -165,16 +222,24 @@ const Dashboard: React.FC<DashboardProps> = ({
   const sectionClass = `bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl mb-1 shadow-sm ${itemPadding}`;
 
   return (
-    <div className="pb-32 pt-1">
+    <div className="pb-1 pt-1">
       <div className="bg-gradient-to-r from-brand-primary to-brand-secondary px-5 py-4 rounded-2xl mb-1 shadow-md">
         <div className="flex justify-between items-center w-full">
           <div>
             <h1 className="text-sm font-black text-white tracking-tighter uppercase leading-none">Dashboard</h1>
             <p className="text-[7px] font-black text-white/50 uppercase tracking-[0.2em] mt-1">Real-time Intelligence</p>
           </div>
-          <button onClick={() => triggerInsightsFetch(true)} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white backdrop-blur-md transition-all active:scale-90">
-            {loadingInsights ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
-          </button>
+          <div className="flex items-center gap-2">
+            {user?.accessToken && (
+              <div className="flex items-center gap-1.5 bg-white/10 px-2 py-1.5 rounded-xl border border-white/10 backdrop-blur-md">
+                <ShieldCheck size={10} className="text-emerald-400" />
+                <span className="text-[7px] font-black text-white uppercase tracking-widest">Secured</span>
+              </div>
+            )}
+            <button onClick={() => triggerInsightsFetch(true)} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white backdrop-blur-md transition-all active:scale-90">
+              {loadingInsights ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+            </button>
+          </div>
         </div>
       </div>
       
@@ -199,9 +264,31 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         <section className={sectionClass}>
+          <div className="flex justify-between items-end">
+            <div>
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Net Worth</p>
+              <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter leading-none">
+                <span className="text-sm opacity-40 mr-1">{currencySymbol}</span>
+                {Math.round(wealthStats.netWorth).toLocaleString()}
+              </h2>
+            </div>
+            <div className="flex gap-4">
+              <div className="text-right">
+                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Assets</p>
+                <p className="text-xs font-black text-emerald-500">{currencySymbol}{Math.round(wealthStats.assets).toLocaleString()}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Debts</p>
+                <p className="text-xs font-black text-rose-500">{currencySymbol}{Math.round(wealthStats.liabilities).toLocaleString()}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={sectionClass}>
           <div className="flex items-center gap-2 mb-3">
             <CalendarDays size={12} className="text-brand-accent" />
-            <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Year-to-Date Performance ({viewDate.getFullYear()})</h3>
+            <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">YTD Profile</h3>
           </div>
           <div className="flex justify-between items-end mb-4">
             <div>
@@ -225,35 +312,114 @@ const Dashboard: React.FC<DashboardProps> = ({
               ) : null;
             })}
           </div>
-          <div className="flex gap-4 mt-2">
-            {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
-              <div key={cat} className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
-                <span className="text-[7px] font-black text-slate-400 uppercase tracking-tight">{cat}</span>
-              </div>
+        </section>
+
+        {/* CHART 1: Composition with Type Toggle */}
+        <section className={sectionClass}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <LineChartIcon size={12} className="text-indigo-500" />
+              <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Quarterly Pulse</h3>
+            </div>
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+               <button onClick={() => { triggerHaptic(); setQuarterlyChartStyle('stacked'); }} className={`p-1 rounded-md transition-all ${quarterlyChartStyle === 'stacked' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}><Layers size={10} /></button>
+               <button onClick={() => { triggerHaptic(); setQuarterlyChartStyle('grouped'); }} className={`p-1 rounded-md transition-all ${quarterlyChartStyle === 'grouped' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}><BarChartIcon size={10} /></button>
+            </div>
+          </div>
+          <div className="h-36 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={quarterlyTrend} margin={{ top: 5, right: 15, left: -30, bottom: 0 }}>
+                <XAxis dataKey="month" hide />
+                <YAxis hide />
+                <Tooltip 
+                  cursor={{fill: 'rgba(0,0,0,0.02)'}}
+                  contentStyle={{ backgroundColor: 'rgba(15, 23, 42, 0.9)', border: 'none', borderRadius: '12px', fontSize: '9px', fontWeight: 'bold' }}
+                  itemStyle={{ color: '#fff' }}
+                  formatter={(value, name) => [`${currencySymbol}${value.toLocaleString()}`, name]}
+                />
+                <Bar dataKey="Needs" stackId={quarterlyChartStyle === 'stacked' ? 'a' : undefined} fill={CATEGORY_COLORS.Needs} radius={quarterlyChartStyle === 'grouped' ? [4, 4, 0, 0] : [0, 0, 0, 0]} barSize={quarterlyChartStyle === 'grouped' ? 8 : undefined} />
+                <Bar dataKey="Wants" stackId={quarterlyChartStyle === 'stacked' ? 'a' : undefined} fill={CATEGORY_COLORS.Wants} radius={quarterlyChartStyle === 'grouped' ? [4, 4, 0, 0] : [0, 0, 0, 0]} barSize={quarterlyChartStyle === 'grouped' ? 8 : undefined} />
+                <Bar dataKey="Savings" stackId={quarterlyChartStyle === 'stacked' ? 'a' : undefined} fill={CATEGORY_COLORS.Savings} radius={[4, 4, 0, 0]} barSize={quarterlyChartStyle === 'grouped' ? 8 : undefined} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex justify-between mt-2 px-2">
+            {quarterlyTrend.map(t => (
+              <span key={t.month} className="text-[7px] font-black text-slate-400 uppercase">{t.month}</span>
             ))}
           </div>
         </section>
 
+        {/* CHART 2: Efficiency Delta with View Toggle */}
         <section className={sectionClass}>
-          <div className="flex justify-between items-end">
-            <div>
-              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Net Worth</p>
-              <h2 className="text-2xl font-black text-slate-900 dark:text-white tracking-tighter leading-none">
-                <span className="text-sm opacity-40 mr-1">{currencySymbol}</span>
-                {Math.round(wealthStats.netWorth).toLocaleString()}
-              </h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <ArrowLeftRight size={12} className="text-emerald-500" />
+              <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Efficiency Delta (MoM)</h3>
             </div>
-            <div className="flex gap-4">
-              <div className="text-right">
-                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Assets</p>
-                <p className="text-xs font-black text-emerald-500">{currencySymbol}{Math.round(wealthStats.assets).toLocaleString()}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Debts</p>
-                <p className="text-xs font-black text-rose-500">{currencySymbol}{Math.round(wealthStats.liabilities).toLocaleString()}</p>
-              </div>
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+               <button onClick={() => { triggerHaptic(); setMomChartStyle('total'); }} className={`p-1 rounded-md transition-all ${momChartStyle === 'total' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}><Layers size={10} /></button>
+               <button onClick={() => { triggerHaptic(); setMomChartStyle('category'); }} className={`p-1 rounded-md transition-all ${momChartStyle === 'category' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}><BarChartIcon size={10} /></button>
             </div>
+          </div>
+          <div className="h-44 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              {momChartStyle === 'category' ? (
+                <BarChart data={momData.categoryView} margin={{ top: 5, right: 5, left: -35, bottom: 0 }}>
+                  <XAxis dataKey="category" hide />
+                  <YAxis hide />
+                  <Tooltip 
+                    cursor={{fill: 'rgba(0,0,0,0.02)'}}
+                    contentStyle={{ borderRadius: '12px', fontSize: '9px', border: 'none', background: '#0f172a', color: '#fff' }}
+                  />
+                  <Bar dataKey="Previous" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={14} />
+                  <Bar dataKey="Current" fill="var(--brand-primary)" radius={[4, 4, 0, 0]} barSize={14} />
+                </BarChart>
+              ) : (
+                <BarChart data={momData.totalView} margin={{ top: 5, right: 5, left: -35, bottom: 0 }}>
+                  <XAxis dataKey="name" hide />
+                  <YAxis hide />
+                  <Tooltip 
+                    cursor={{fill: 'rgba(0,0,0,0.02)'}}
+                    contentStyle={{ borderRadius: '12px', fontSize: '9px', border: 'none', background: '#0f172a', color: '#fff' }}
+                  />
+                  <Bar dataKey="Needs" stackId="a" fill={CATEGORY_COLORS.Needs} radius={[0, 0, 0, 0]} barSize={40} />
+                  <Bar dataKey="Wants" stackId="a" fill={CATEGORY_COLORS.Wants} radius={[0, 0, 0, 0]} barSize={40} />
+                  <Bar dataKey="Savings" stackId="a" fill={CATEGORY_COLORS.Savings} radius={[4, 4, 0, 0]} barSize={40} />
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+          
+          {momChartStyle === 'category' ? (
+            <div className="flex justify-between mt-2 px-2">
+              {momData.categoryView.map(d => (
+                <div key={d.category} className="flex flex-col items-center">
+                   <div className="w-1.5 h-1.5 rounded-full mb-1" style={{ backgroundColor: CATEGORY_COLORS[d.category as Category] }} />
+                   <span className="text-[6px] font-black text-slate-400 uppercase">{d.category}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex justify-around mt-2 px-10">
+               <span className="text-[7px] font-black text-slate-400 uppercase">Previous Month</span>
+               <span className="text-[7px] font-black text-brand-primary uppercase">This Month</span>
+            </div>
+          )}
+
+          <div className="flex justify-center gap-6 mt-4 pt-2 border-t border-slate-50 dark:border-slate-800">
+             {momChartStyle === 'category' ? (
+               <>
+                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-slate-300 rounded-sm" /><span className="text-[7px] font-black uppercase text-slate-400">Prev Month</span></div>
+                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 bg-brand-primary rounded-sm" /><span className="text-[7px] font-black uppercase text-brand-primary">This Month</span></div>
+               </>
+             ) : (
+               <>
+                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-sm" style={{backgroundColor: CATEGORY_COLORS.Needs}} /><span className="text-[7px] font-black uppercase text-slate-400">Needs</span></div>
+                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-sm" style={{backgroundColor: CATEGORY_COLORS.Wants}} /><span className="text-[7px] font-black uppercase text-slate-400">Wants</span></div>
+                 <div className="flex items-center gap-1.5"><div className="w-1.5 h-1.5 rounded-sm" style={{backgroundColor: CATEGORY_COLORS.Savings}} /><span className="text-[7px] font-black uppercase text-slate-400">Savings</span></div>
+               </>
+             )}
           </div>
         </section>
 

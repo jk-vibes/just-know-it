@@ -2,16 +2,46 @@
 import { Category, PaymentMethod } from './types';
 
 export const CATEGORY_COLORS: Record<Category, string> = {
-  Needs: '#ff3d71',     // Vibrant Electric Rose
-  Wants: '#8b5cf6',     // Rich Violet
-  Savings: '#00d68f',   // Vivid Emerald
+  Needs: '#60a5fa',     // Light Blue (Sky)
+  Wants: '#ef4444',     // Red
+  Savings: '#22c55e',   // Green
   Uncategorized: '#94a3b8' // Slate
 };
 
 export const SUB_CATEGORIES: Record<Category, string[]> = {
-  Needs: ['Rent/Mortgage', 'Groceries', 'Utilities', 'Fuel/Transport', 'Health/Insurance', 'Education', 'Debt Interest'],
-  Wants: ['Dining', 'Shopping', 'Travel', 'Entertainment', 'Subscription', 'Gifts', 'Hobbies'],
-  Savings: ['SIP/Mutual Fund', 'Emergency Fund', 'Stocks', 'Gold', 'Real Estate', 'Crypto', 'Cash Stash'],
+  Needs: [
+    'Rent/Mortgage', 
+    'Groceries', 
+    'Utilities', 
+    'Fuel/Transport', 
+    'Internet/Mobile', 
+    'Health/Insurance', 
+    'Education', 
+    'Household', 
+    'Debt Interest'
+  ],
+  Wants: [
+    'Dining', 
+    'Shopping', 
+    'Travel', 
+    'Entertainment', 
+    'Subscription', 
+    'Gifts', 
+    'Hobbies', 
+    'Coffee', 
+    'Apparel', 
+    'Beauty/Grooming'
+  ],
+  Savings: [
+    'SIP/Mutual Fund', 
+    'Emergency Fund', 
+    'Stocks', 
+    'Gold', 
+    'Real Estate', 
+    'Crypto', 
+    'Fixed Deposit', 
+    'Retirement'
+  ],
   Uncategorized: ['General', 'Transfer', 'Correction']
 };
 

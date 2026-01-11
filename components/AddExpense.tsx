@@ -93,7 +93,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({ settings, onAdd, onAddIncome, o
         <div className="flex gap-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-t-3xl border-b border-slate-100 dark:border-slate-800">
           <button 
             onClick={() => setMode('Expense')}
-            className={`flex-1 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all font-black text-xs uppercase tracking-widest ${mode === 'Expense' ? 'bg-[#f14444] text-white shadow-lg' : 'text-slate-400'}`}
+            className={`flex-1 py-3 rounded-2xl flex items-center justify-center gap-2 transition-all font-black text-xs uppercase tracking-widest ${mode === 'Expense' ? 'bg-brand-primary text-white shadow-lg' : 'text-slate-400'}`}
           >
             <ArrowDownCircle size={16} /> Expense
           </button>
@@ -169,7 +169,6 @@ const AddExpense: React.FC<AddExpenseProps> = ({ settings, onAdd, onAddIncome, o
             ) : (
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2">
-                  {/* Fixed 'ランドマーク' to 'Landmark' from lucide-react */}
                   <Landmark size={14} className="text-slate-400" />
                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Inflow Type</span>
                 </div>
@@ -244,7 +243,7 @@ const AddExpense: React.FC<AddExpenseProps> = ({ settings, onAdd, onAddIncome, o
           <button
             type="submit"
             disabled={!amount}
-            className={`w-full ${mode === 'Expense' ? 'bg-[#f14444]' : 'bg-indigo-600'} text-white font-black py-5 rounded-3xl shadow-xl flex items-center justify-center gap-3 hover:opacity-95 disabled:opacity-50 transition-all text-xs uppercase tracking-widest mt-6`}
+            className={`w-full ${mode === 'Expense' ? 'bg-brand-primary' : 'bg-indigo-600'} text-white font-black py-5 rounded-3xl shadow-xl flex items-center justify-center gap-3 hover:opacity-95 disabled:opacity-50 transition-all text-xs uppercase tracking-widest mt-6`}
           >
             {mode === 'Expense' 
               ? (frequency !== 'None' ? 'Set Subscription' : 'Log Expense') 

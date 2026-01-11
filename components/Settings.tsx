@@ -79,8 +79,7 @@ const Settings: React.FC<SettingsProps> = ({
   const labelClass = "text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3 px-1";
 
   return (
-    <div className="pb-32 pt-1">
-      {/* HEADER CARD - CONSISTENT WITH DASHBOARD */}
+    <div className="pb-12 pt-1 animate-slide-up">
       <div className="bg-gradient-to-r from-slate-800 to-slate-950 dark:from-slate-900 dark:to-black px-5 py-4 rounded-2xl mb-2 shadow-md">
         <div className="flex justify-between items-center w-full">
           <div>
@@ -134,41 +133,44 @@ const Settings: React.FC<SettingsProps> = ({
           <div className="p-4">
             <h3 className={labelClass}><Database size={10} /> Data Management</h3>
             <div className="grid grid-cols-2 gap-2 mb-2">
-              <button onClick={onSync} disabled={isSyncing} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-indigo-600 text-white shadow-md active:scale-95 transition-all disabled:opacity-50">
+              <button onClick={onSync} disabled={isSyncing || !user?.accessToken} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-indigo-600 text-white shadow-md active:scale-95 transition-all disabled:opacity-50">
                 {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : <Cloud size={14} />}
-                <span className="text-[9px] font-black uppercase tracking-widest">Vault Sync</span>
+                <span className="text-[9px] font-black uppercase tracking-widest">{!user?.accessToken ? 'No Auth' : 'Vault Sync'}</span>
               </button>
               <button onClick={onExport} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 active:scale-95 transition-all">
                 <Download size={14} className="text-slate-400" />
-                <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Export</span>
+                <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Export Snapshot</span>
               </button>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <button onClick={handleImportClick} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 active:scale-95 transition-all">
                 <Upload size={14} className="text-slate-400" />
-                <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Import</span>
+                <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Restore</span>
               </button>
               <button onClick={() => { triggerHaptic(); onLoadMockData(); }} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 active:scale-95 transition-all">
                 <Zap size={14} className="text-amber-500" />
-                <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Sample</span>
+                <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Mock</span>
               </button>
               <button onClick={() => { triggerHaptic(); onPurgeMockData(); }} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 active:scale-95 transition-all">
-                <Trash size={14} className="text-slate-400" />
+                <Trash size={14} className="text-rose-400" />
                 <span className="text-[9px] font-black uppercase tracking-widest dark:text-white">Purge</span>
               </button>
-              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".csv" className="hidden" />
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
             </div>
+            {settings.lastSynced && (
+              <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest text-center mt-3">Vault Snapshot: {new Date(settings.lastSynced).toLocaleString()}</p>
+            )}
           </div>
         </section>
 
-        <section className="mb-12 space-y-2">
+        <section className="mb-8 space-y-2">
           <button onClick={() => { triggerHaptic(20); onClearExpenses(); }} className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-rose-50/50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/20 text-rose-500 active:scale-95 transition-all">
             <Eraser size={14} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Flush User History</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Flush Local Buffer</span>
           </button>
           <button onClick={onReset} className="w-full flex items-center justify-center gap-2 py-3 text-slate-400 dark:text-slate-600 hover:text-rose-500 transition-colors active:scale-95">
             <ShieldAlert size={12} />
-            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Reset All System Defaults</span>
+            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Full Factory Reset</span>
           </button>
         </section>
       </div>

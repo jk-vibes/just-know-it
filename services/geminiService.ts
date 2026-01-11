@@ -1,10 +1,8 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
-import { Expense, UserSettings, Category, WealthItem } from "../types";
+import { Expense, UserSettings, Category, WealthItem, BudgetItem, Bill } from "../types";
 
-// Initialize Gemini API
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Global queue to prevent concurrent requests (reduces RPM spikes)
 let isProcessing = false;
 const queue: (() => Promise<void>)[] = [];
 
@@ -38,20 +36,14 @@ function setPersistentCache(hash: string, data: any) {
   }
 }
 
-/**
- * Generates a stable hash for the current financial state.
- */
 export function getExpensesHash(expenses: Expense[], settings: UserSettings): string {
   const confirmed = expenses
     .filter(e => e.isConfirmed)
     .sort((a, b) => a.id.localeCompare(b.id))
     .map(e => `${e.id}-${Math.round(e.amount)}`);
-  return `v4-rounded-${settings.currency}-${Math.round(settings.monthlyIncome)}-${confirmed.length}-${confirmed.slice(-5).join('|')}`;
+  return `v5-tactical-${settings.currency}-${Math.round(settings.monthlyIncome)}-${confirmed.length}-${confirmed.slice(-5).join('|')}`;
 }
 
-/**
- * Robust retry logic with exponential backoff and jitter for rate limits.
- */
 async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 15000): Promise<T> {
   return new Promise((resolve, reject) => {
     const execute = async () => {
@@ -78,6 +70,73 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 15000): P
     queue.push(execute);
     processQueue();
   });
+}
+
+export async function analyzeBillImage(base64Image: string, currency: string) {
+  const prompt = `
+    This is an image of a financial bill/receipt. 
+    Extract the total amount (integer), merchant name, and due date (if present, else today).
+    Categorize it into Needs/Wants/Savings.
+    Return JSON: {amount: number, merchant: string, dueDate: string, category: string}
+  `;
+
+  try {
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: [
+        { inlineData: { mimeType: 'image/jpeg', data: base64Image.split(',')[1] } },
+        { text: prompt }
+      ],
+      config: { responseMimeType: "application/json" }
+    }));
+    return JSON.parse(response.text || '{}');
+  } catch (error) {
+    console.error("OCR Error:", error);
+    return null;
+  }
+}
+
+export async function getTacticalStrategy(
+  expenses: Expense[], 
+  budgetItems: BudgetItem[], 
+  pendingBills: Bill[], 
+  settings: UserSettings
+) {
+  const summary = expenses.reduce((acc, exp) => {
+    if (exp.isConfirmed) {
+      acc[exp.category] = (acc[exp.category] || 0) + Math.round(exp.amount);
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
+  const billTotal = pendingBills.reduce((sum, b) => sum + b.amount, 0);
+
+  const prompt = `
+    Expenditure Planning Analysis:
+    Income: ${settings.monthlyIncome} ${settings.currency}
+    Actual Spend: Needs ${summary.Needs || 0}, Wants ${summary.Wants || 0}, Savings ${summary.Savings || 0}
+    Unpaid Bills: ${billTotal} ${settings.currency}
+    Target Allocation: ${settings.split.Needs}% Needs, ${settings.split.Wants}% Wants, ${settings.split.Savings}% Savings
+    
+    Provide a tactical recommendation on how to control expenses for the rest of the month.
+    Return JSON: {
+      status: "Safe" | "Caution" | "Critical",
+      recommendation: string (max 20 words),
+      drillDown: string[] (3 actionable items),
+      headroom: number (remaining discretionary cash)
+    }
+  `;
+
+  try {
+    const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: { responseMimeType: "application/json" }
+    }));
+    return JSON.parse(response.text || '{}');
+  } catch (error) {
+    return null;
+  }
 }
 
 export async function getBudgetInsights(expenses: Expense[], settings: UserSettings) {
@@ -107,18 +166,7 @@ export async function getBudgetInsights(expenses: Expense[], settings: UserSetti
       model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              tip: { type: Type.STRING },
-              impact: { type: Type.STRING }
-            },
-            required: ["tip", "impact"]
-          }
-        }
+        responseMimeType: "application/json"
       }
     }));
     
@@ -128,7 +176,6 @@ export async function getBudgetInsights(expenses: Expense[], settings: UserSetti
     }
     return results;
   } catch (error) {
-    console.error("Gemini Insights Error:", error);
     return null;
   }
 }
@@ -154,23 +201,10 @@ export async function auditTransaction(expense: Expense, currency: string) {
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            isCorrect: { type: Type.BOOLEAN },
-            suggestedCategory: { type: Type.STRING },
-            insight: { type: Type.STRING },
-            isAnomaly: { type: Type.BOOLEAN }
-          },
-          required: ["isCorrect", "suggestedCategory", "insight", "isAnomaly"]
-        }
-      }
+      config: { responseMimeType: "application/json" }
     }));
     return JSON.parse(response.text || '{}');
   } catch (error) {
-    console.error("Audit Error:", error);
     return null;
   }
 }
@@ -206,25 +240,10 @@ export async function getDecisionAdvice(
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            status: { type: Type.STRING },
-            score: { type: Type.NUMBER },
-            reasoning: { type: Type.STRING },
-            actionPlan: { type: Type.ARRAY, items: { type: Type.STRING } },
-            waitTime: { type: Type.STRING },
-            impactPercentage: { type: Type.NUMBER }
-          },
-          required: ["status", "score", "reasoning", "actionPlan", "waitTime", "impactPercentage"]
-        }
-      }
+      config: { responseMimeType: "application/json" }
     }));
     return JSON.parse(response.text || '{}');
   } catch (error) {
-    console.error("Gemini Decision Error:", error);
     return { 
       status: 'Yellow', 
       score: 50, 
@@ -246,19 +265,7 @@ export async function parseTransactionText(text: string, currency: string): Prom
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            amount: { type: Type.NUMBER },
-            merchant: { type: Type.STRING },
-            category: { type: Type.STRING },
-            subCategory: { type: Type.STRING },
-            date: { type: Type.STRING }
-          }
-        }
-      }
+      config: { responseMimeType: "application/json" }
     }));
     
     const result = JSON.parse(response.text || '{}');
@@ -271,7 +278,6 @@ export async function parseTransactionText(text: string, currency: string): Prom
       date: result.date || new Date().toISOString().split('T')[0]
     };
   } catch (error) {
-    console.error("Gemini Parse Error:", error);
     return null;
   }
 }
@@ -286,27 +292,13 @@ export async function parseBulkTransactions(text: string, currency: string): Pro
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              amount: { type: Type.NUMBER },
-              merchant: { type: Type.STRING },
-              category: { type: Type.STRING },
-              subCategory: { type: Type.STRING },
-              date: { type: Type.STRING }
-            }
-          }
-        }
-      }
+      config: { responseMimeType: "application/json" }
     }));
     
     const results = JSON.parse(response.text || '[]');
     const validCategories: Category[] = ['Needs', 'Wants', 'Savings', 'Uncategorized'];
 
+    // Fixed typo: used 'r' instead of 'result' which was undefined in this scope
     return results.map((r: any) => ({
       amount: Math.round(Math.abs(r.amount || 0)),
       merchant: r.merchant || 'Merchant',
@@ -315,7 +307,6 @@ export async function parseBulkTransactions(text: string, currency: string): Pro
       date: r.date || new Date().toISOString().split('T')[0]
     }));
   } catch (error) {
-    console.error("Gemini Bulk Parse Error:", error);
     return [];
   }
 }
@@ -336,17 +327,7 @@ export async function predictBudgetCategory(name: string): Promise<{ category: C
     const response = await withRetry<GenerateContentResponse>(() => ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            category: { type: Type.STRING },
-            subCategory: { type: Type.STRING }
-          },
-          required: ["category", "subCategory"]
-        }
-      }
+      config: { responseMimeType: "application/json" }
     }));
     
     const result = JSON.parse(response.text || '{}');
@@ -356,7 +337,6 @@ export async function predictBudgetCategory(name: string): Promise<{ category: C
       subCategory: result.subCategory || 'General'
     };
   } catch (error) {
-    console.error("Gemini Budget Prediction Error:", error);
     return null;
   }
 }

@@ -17,8 +17,20 @@ export interface BudgetItem {
   amount: number;
   category: Category;
   subCategory?: string;
-  isRecurringLink?: string; // Links to a recurringItem id if it's a fixed expense
+  isRecurringLink?: string; 
   isMock?: boolean;
+}
+
+export interface Bill {
+  id: string;
+  amount: number;
+  dueDate: string;
+  merchant: string;
+  category: Category;
+  isPaid: boolean;
+  frequency: Frequency;
+  image?: string; // base64
+  note?: string;
 }
 
 export interface Expense {
@@ -31,7 +43,9 @@ export interface Expense {
   note?: string;
   merchant?: string;
   isConfirmed: boolean;
+  sourceAccountId?: string; 
   isMock?: boolean;
+  billId?: string; // Optional link to a captured bill
 }
 
 export interface Income {
@@ -76,12 +90,13 @@ export interface RecurringItem {
 
 export interface Notification {
   id: string;
-  type: 'AI' | 'Activity';
+  type: 'AI' | 'Activity' | 'Bill' | 'Strategy';
   title: string;
   message: string;
   timestamp: string;
   read: boolean;
   severity?: 'info' | 'success' | 'warning' | 'error';
+  metadata?: any; // For strategy scores or bill links
 }
 
 export interface UserSettings {
