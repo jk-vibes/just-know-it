@@ -4,9 +4,8 @@ import { getCurrencySymbol, CATEGORY_COLORS } from '../constants';
 import { 
   Plus, Landmark, CreditCard, ShieldCheck, 
   Edit3, ArrowUpRight, ArrowDownRight, TrendingUp,
-  ArrowLeft, ArrowRight, History
+  ArrowLeft, ArrowRight, History, ArrowUpCircle, ArrowRightLeft
 } from 'lucide-react';
-import AccountForm from './AccountForm';
 import { triggerHaptic } from '../utils/haptics';
 
 interface AccountsProps {
@@ -17,24 +16,26 @@ interface AccountsProps {
   onUpdateWealth: (id: string, updates: Partial<WealthItem>) => void;
   onDeleteWealth: (id: string) => void;
   onAddWealth: (item: Omit<WealthItem, 'id'>) => void;
+  onEditAccount: (account: WealthItem) => void;
+  onAddAccountClick: () => void;
+  onAddIncomeClick?: () => void;
+  onAddTransferClick?: () => void;
   externalShowAdd?: boolean;
   onAddClose?: () => void;
 }
 
 const Accounts: React.FC<AccountsProps> = ({
-  wealthItems, expenses, incomes, settings, onUpdateWealth, onDeleteWealth, onAddWealth, externalShowAdd, onAddClose
+  wealthItems, expenses, incomes, settings, onUpdateWealth, onDeleteWealth, onAddWealth, onEditAccount, onAddAccountClick, onAddIncomeClick, onAddTransferClick, externalShowAdd, onAddClose
 }) => {
   const currencySymbol = getCurrencySymbol(settings.currency);
-  const [showAccountForm, setShowAccountForm] = useState(false);
-  const [editingItem, setEditingItem] = useState<WealthItem | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     if (externalShowAdd) {
-      handleAdd();
+      onAddAccountClick();
       onAddClose?.();
     }
-  }, [externalShowAdd, onAddClose]);
+  }, [externalShowAdd, onAddAccountClick, onAddClose]);
 
   const stats = useMemo(() => {
     const debitItems = wealthItems.filter(i => ['Checking Account', 'Savings Account', 'Cash'].includes(i.category));
@@ -67,17 +68,10 @@ const Accounts: React.FC<AccountsProps> = ({
     );
   }, [selectedAccountId, expenses, incomes]);
 
-  const handleEdit = (item: WealthItem, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleEdit = (item: WealthItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     triggerHaptic();
-    setEditingItem(item);
-    setShowAccountForm(true);
-  };
-
-  const handleAdd = () => {
-    triggerHaptic();
-    setEditingItem(null);
-    setShowAccountForm(true);
+    onEditAccount(item);
   };
 
   const handleAccountClick = (id: string) => {
@@ -91,17 +85,25 @@ const Accounts: React.FC<AccountsProps> = ({
     return (
       <div className="pb-32 pt-1 animate-slide-up">
         <div className="bg-gradient-to-r from-slate-800 to-slate-950 dark:from-slate-900 dark:to-black px-5 py-4 rounded-2xl mb-4 mx-1">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => { triggerHaptic(); setSelectedAccountId(null); }}
+                className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white active:scale-90 transition-all"
+              >
+                <ArrowLeft size={18} strokeWidth={3} />
+              </button>
+              <div>
+                <h1 className="text-sm font-black text-white tracking-tighter uppercase leading-none">Statement</h1>
+                <p className="text-[7px] font-black text-white/50 uppercase tracking-[0.2em] mt-1 truncate max-w-[160px]">{selectedAccount.name}</p>
+              </div>
+            </div>
             <button 
-              onClick={() => { triggerHaptic(); setSelectedAccountId(null); }}
+              onClick={() => handleEdit(selectedAccount)}
               className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white active:scale-90 transition-all"
             >
-              <ArrowLeft size={18} strokeWidth={3} />
+              <Edit3 size={16} />
             </button>
-            <div>
-              <h1 className="text-sm font-black text-white tracking-tighter uppercase leading-none">Statement</h1>
-              <p className="text-[7px] font-black text-white/50 uppercase tracking-[0.2em] mt-1 truncate max-w-[200px]">{selectedAccount.name}</p>
-            </div>
           </div>
         </div>
 
@@ -173,7 +175,29 @@ const Accounts: React.FC<AccountsProps> = ({
             <h1 className="text-sm font-black text-white tracking-tighter uppercase leading-none">Accounts</h1>
             <p className="text-[7px] font-black text-white/50 uppercase tracking-[0.2em] mt-1">Registry</p>
           </div>
-          {/* Header Plus Icon Removed - Now handled by FAB morph */}
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => { triggerHaptic(); onAddTransferClick?.(); }}
+              className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white backdrop-blur-md transition-all active:scale-95"
+              title="Transfer Funds"
+            >
+              <ArrowRightLeft size={14} />
+            </button>
+            <button 
+              onClick={() => { triggerHaptic(); onAddIncomeClick?.(); }}
+              className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white backdrop-blur-md transition-all active:scale-95"
+              title="Add Income"
+            >
+              <ArrowUpCircle size={14} />
+            </button>
+            <button 
+              onClick={() => { triggerHaptic(); onAddAccountClick(); }}
+              className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white backdrop-blur-md transition-all active:scale-95"
+              title="Add Account"
+            >
+              <Plus size={14} strokeWidth={3} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -233,7 +257,7 @@ const Accounts: React.FC<AccountsProps> = ({
                 </div>
                 <div className="flex items-center gap-3">
                   <p className="text-[11px] font-black text-slate-900 dark:text-white">{currencySymbol}{Math.round(item.value).toLocaleString()}</p>
-                  <button onClick={(e) => handleEdit(item, e)} className="p-1 text-slate-300 hover:text-indigo-500 transition-all active:scale-90 opacity-0 group-hover:opacity-100">
+                  <button onClick={(e) => handleEdit(item, e)} className="p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all active:scale-90">
                       <Edit3 size={14} />
                   </button>
                 </div>
@@ -263,7 +287,7 @@ const Accounts: React.FC<AccountsProps> = ({
                   </div>
                   <div className="flex items-center gap-3">
                     <p className="text-[11px] font-black text-rose-500">{currencySymbol}{Math.round(item.value).toLocaleString()}</p>
-                    <button onClick={(e) => handleEdit(item, e)} className="p-1 text-slate-300 hover:text-indigo-500 active:scale-90 transition-all opacity-0 group-hover:opacity-100"><Edit3 size={14} /></button>
+                    <button onClick={(e) => handleEdit(item, e)} className="p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all active:scale-90"><Edit3 size={14} /></button>
                   </div>
                 </div>
               ))}
@@ -292,7 +316,7 @@ const Accounts: React.FC<AccountsProps> = ({
                   </div>
                   <div className="flex items-center gap-3">
                     <p className="text-[11px] font-black text-emerald-500">{currencySymbol}{Math.round(item.value).toLocaleString()}</p>
-                    <button onClick={(e) => handleEdit(item, e)} className="p-1 text-slate-300 hover:text-indigo-500 active:scale-90 transition-all opacity-0 group-hover:opacity-100"><Edit3 size={14} /></button>
+                    <button onClick={(e) => handleEdit(item, e)} className="p-1 text-slate-400 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all active:scale-90"><Edit3 size={14} /></button>
                   </div>
                 </div>
               ))}
@@ -300,16 +324,6 @@ const Accounts: React.FC<AccountsProps> = ({
           </section>
         )}
       </div>
-
-      {showAccountForm && (
-        <AccountForm 
-          settings={settings}
-          onSave={(item) => { onAddWealth(item); setShowAccountForm(false); }}
-          onUpdate={(id, updates) => { onUpdateWealth(id, updates); setShowAccountForm(false); }}
-          onCancel={() => { triggerHaptic(); setShowAccountForm(false); }}
-          initialData={editingItem}
-        />
-      )}
     </div>
   );
 };

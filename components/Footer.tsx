@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Shield, Zap } from 'lucide-react';
 
@@ -18,7 +19,7 @@ const Footer: React.FC = () => {
           </p>
           
           <div className="flex items-center justify-center gap-2.5">
-             <span className="text-[8px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest">Build v1.1.8</span>
+             <span className="text-[8px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest">Build v1.1.9</span>
              <span className="w-1 h-1 rounded-full bg-slate-200 dark:bg-slate-800"></span>
              <span className="text-[8px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest">© 2025 Rights Reserved</span>
           </div>

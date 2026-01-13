@@ -1,7 +1,8 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { BudgetItem, RecurringItem, UserSettings, Category, Expense, Bill } from '../types';
 import { CATEGORY_COLORS, getCurrencySymbol, SUB_CATEGORIES } from '../constants';
-import { Target, Plus, Trash2, PieChart, ChevronDown, ChevronUp, AlertCircle, Info, Bookmark, Sparkles, Loader2, X, TrendingUp, Check, Layers, Tag, Clock, Calendar, ShieldCheck, ArrowRight, Repeat, Store } from 'lucide-react';
+import { Target, Plus, Trash2, PieChart, ChevronDown, ChevronUp, AlertCircle, Info, Bookmark, Sparkles, Loader2, X, TrendingUp, Check, Layers, Tag, Clock, Calendar, ShieldCheck, ArrowRight, Repeat, Store, Camera } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { predictBudgetCategory } from '../services/geminiService';
 
@@ -149,6 +150,12 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
     return [...bills].sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   }, [bills]);
 
+  const nextCriticalBill = useMemo(() => {
+    const unpaid = bills.filter(b => !b.isPaid);
+    if (unpaid.length === 0) return null;
+    return unpaid.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0];
+  }, [bills]);
+
   const sectionClass = "bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 mb-2 shadow-sm";
 
   return (
@@ -253,23 +260,48 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
         </>
       ) : (
         <div className="space-y-2 animate-kick">
+           {nextCriticalBill && (
+             <section className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-2xl p-4 shadow-sm mb-2">
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center text-white">
+                         <Sparkles size={20} />
+                      </div>
+                      <div>
+                         <p className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Smart Reminder</p>
+                         <h4 className="text-[11px] font-black text-slate-800 dark:text-white mt-0.5">Authorize {nextCriticalBill.merchant} payment</h4>
+                      </div>
+                   </div>
+                   <button onClick={() => onPayBill(nextCriticalBill)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-[8px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">Settle Now</button>
+                </div>
+             </section>
+           )}
+
            <section className={sectionClass}>
-             <div className="flex items-center gap-3">
-               <div className="p-2.5 bg-brand-primary/10 rounded-2xl text-brand-primary">
-                 <ShieldCheck size={20} />
+             <div className="flex items-center justify-between">
+               <div className="flex items-center gap-3">
+                 <div className="p-2.5 bg-brand-primary/10 rounded-2xl text-brand-primary">
+                   <ShieldCheck size={20} />
+                 </div>
+                 <div>
+                   <h3 className="text-xs font-black uppercase tracking-tight dark:text-white">Remittance Registry</h3>
+                   <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Commitment Monitoring</p>
+                 </div>
                </div>
-               <div>
-                 <h3 className="text-xs font-black uppercase tracking-tight dark:text-white">Remittance Registry</h3>
-                 <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Automated Bill Monitoring</p>
-               </div>
+               <button 
+                 onClick={onSmartAddBill}
+                 className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 dark:bg-white dark:text-slate-900 text-white rounded-xl text-[9px] font-black uppercase tracking-widest shadow-md active:scale-95 transition-all"
+               >
+                 <Camera size={12} /> Snap Bill
+               </button>
              </div>
            </section>
 
            {sortedBills.length === 0 ? (
              <div className="py-20 text-center flex flex-col items-center">
                <Calendar className="text-slate-200 dark:text-slate-800 mb-4" size={48} />
-               <p className="text-[10px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-[0.2em]">No bills in queue</p>
-               <button onClick={onSmartAddBill} className="mt-4 px-6 py-2.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-500 active:scale-95 transition-all">Track New Remittance</button>
+               <p className="text-[10px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-[0.2em]">No bills in registry</p>
+               <button onClick={onSmartAddBill} className="mt-4 px-6 py-2.5 bg-brand-primary text-white rounded-xl text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-lg">Begin Tracking</button>
              </div>
            ) : (
              <div className="space-y-2 px-1">
@@ -326,7 +358,6 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
       {showAddForm && (
         <div className="fixed inset-0 bg-black/60 z-[110] flex items-end justify-center p-0 backdrop-blur-sm animate-kick">
           <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-[32px] shadow-2xl overflow-hidden flex flex-col animate-slide-up max-h-[85dvh]">
-            {/* Compact Header matching AddRecord */}
             <div className="flex items-center justify-between px-4 py-2 border-b dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
               <button onClick={() => { triggerHaptic(); closeForm(); }} className="p-2 text-slate-400 active:scale-90 transition-all"><X size={18} strokeWidth={2.5} /></button>
               <div className="flex items-center"><h3 className="text-[9px] font-black uppercase tracking-widest text-slate-400">{editingItem ? 'Modify Plan' : 'New Plan Entry'}</h3></div>
@@ -338,7 +369,6 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
 
             <div className="flex-1 overflow-y-auto no-scrollbar p-3">
               <div className="space-y-3">
-                {/* AMOUNT INPUT: Reduced Row Height */}
                 <div className="space-y-0.5">
                   <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest ml-1">Allocated Amount</p>
                   <div className="relative flex items-center bg-slate-50 dark:bg-slate-800 rounded-xl px-2.5 py-1.5 border border-transparent focus-within:border-brand-primary/30 transition-all">
@@ -347,7 +377,6 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
                   </div>
                 </div>
 
-                {/* NAME & CATEGORY DROPDOWN */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-0.5">
                     <div className="flex justify-between items-center px-1">
@@ -384,7 +413,6 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
                   </div>
                 </div>
 
-                {/* SUB-CATEGORY DROPDOWN */}
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1.5 ml-1">
                     <Layers size={10} className="text-slate-400" />
@@ -413,7 +441,7 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
               </div>
             </div>
             <div className="p-3 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 text-center">
-              <p className="text-[6px] font-black text-slate-400 uppercase tracking-[0.2em]">Architecture Build 1.1.8 • Secured Planning</p>
+              <p className="text-[6px] font-black text-slate-400 uppercase tracking-[0.2em]">Architecture Build 1.1.9 • Secured Planning</p>
             </div>
           </div>
         </div>

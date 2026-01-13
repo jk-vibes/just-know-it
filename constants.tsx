@@ -1,4 +1,3 @@
-
 import { Category, PaymentMethod } from './types';
 
 export const CATEGORY_COLORS: Record<Category, string> = {
@@ -42,7 +41,7 @@ export const SUB_CATEGORIES: Record<Category, string[]> = {
     'Fixed Deposit', 
     'Retirement'
   ],
-  Uncategorized: ['General', 'Transfer', 'Correction']
+  Uncategorized: ['General', 'Transfer', 'Bill Payment', 'Correction']
 };
 
 export const PAYMENT_METHODS: PaymentMethod[] = ['UPI', 'Card', 'Cash', 'Net Banking', 'Other'];

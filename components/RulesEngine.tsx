@@ -1,11 +1,13 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BudgetRule, Category, RecurringItem, UserSettings } from '../types';
 import { CATEGORY_COLORS } from '../constants';
-import { Plus, Trash2, Tag, Repeat, Clock, Workflow } from 'lucide-react';
+import { Plus, Trash2, Tag, Repeat, Clock, Workflow, Zap, Info } from 'lucide-react';
+import { triggerHaptic } from '../utils/haptics';
 
 interface RulesEngineProps {
   rules: BudgetRule[];
+  highlightRuleId?: string | null;
+  onClearHighlight?: () => void;
   recurringItems: RecurringItem[];
   settings: UserSettings;
   onAddRule: (rule: Omit<BudgetRule, 'id'>) => void;
@@ -13,11 +15,22 @@ interface RulesEngineProps {
   onDeleteRecurring: (id: string) => void;
 }
 
-const RulesEngine: React.FC<RulesEngineProps> = ({ rules, recurringItems, settings, onAddRule, onDeleteRule, onDeleteRecurring }) => {
+const RulesEngine: React.FC<RulesEngineProps> = ({ rules, highlightRuleId, onClearHighlight, recurringItems, settings, onAddRule, onDeleteRule, onDeleteRecurring }) => {
   const [activeTab, setActiveTab] = useState<'mapping' | 'recurring'>('mapping');
   const [isAdding, setIsAdding] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState<Category>('Needs');
+
+  useEffect(() => {
+    if (highlightRuleId) {
+      setActiveTab('mapping');
+      // Auto-clear highlight after some time to stop the animation
+      const timer = setTimeout(() => {
+        if (onClearHighlight) onClearHighlight();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightRuleId, onClearHighlight]);
 
   const handleAdd = () => {
     if (!keyword) return;
@@ -48,9 +61,16 @@ const RulesEngine: React.FC<RulesEngineProps> = ({ rules, recurringItems, settin
         </div>
       </div>
 
+      {highlightRuleId && (
+        <div className="mx-1 p-2 bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-800 rounded-xl flex items-center gap-3 animate-kick">
+           <Info size={14} className="text-indigo-500" />
+           <p className="text-[8px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">Highlighting the rule matched to your entry</p>
+        </div>
+      )}
+
       <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl mx-1">
-        <button onClick={() => setActiveTab('mapping')} className={`flex-1 py-1.5 text-[8px] font-black uppercase rounded-lg transition-all ${activeTab === 'mapping' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}>Keyword Mapping</button>
-        <button onClick={() => setActiveTab('recurring')} className={`flex-1 py-1.5 text-[8px] font-black uppercase rounded-lg transition-all ${activeTab === 'recurring' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}>Recurring ({recurringItems.length})</button>
+        <button onClick={() => { triggerHaptic(); setActiveTab('mapping'); }} className={`flex-1 py-1.5 text-[8px] font-black uppercase rounded-lg transition-all ${activeTab === 'mapping' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}>Keyword Mapping</button>
+        <button onClick={() => { triggerHaptic(); setActiveTab('recurring'); }} className={`flex-1 py-1.5 text-[8px] font-black uppercase rounded-lg transition-all ${activeTab === 'recurring' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}>Recurring ({recurringItems.length})</button>
       </div>
 
       {activeTab === 'mapping' && (
@@ -79,9 +99,14 @@ const RulesEngine: React.FC<RulesEngineProps> = ({ rules, recurringItems, settin
               </div>
             ) : (
               rules.map(rule => (
-                <div key={rule.id} className={`bg-white dark:bg-slate-800 ${itemPadding} rounded-xl border border-slate-50 dark:border-slate-800 flex items-center justify-between group`}>
+                <div 
+                  key={rule.id} 
+                  className={`bg-white dark:bg-slate-800 ${itemPadding} rounded-xl border flex items-center justify-between group transition-all duration-500 ${highlightRuleId === rule.id ? 'border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.2)] animate-pulse' : 'border-slate-50 dark:border-slate-800'}`}
+                >
                   <div className="flex items-center gap-3">
-                    <Tag size={14} className="text-slate-400" />
+                    <div className={`${highlightRuleId === rule.id ? 'text-emerald-500' : 'text-slate-400'}`}>
+                      {highlightRuleId === rule.id ? <Zap size={14} className="fill-emerald-500" /> : <Tag size={14} />}
+                    </div>
                     <div>
                       <h4 className={`font-black text-slate-900 dark:text-white ${density === 'Compact' ? 'text-[11px]' : 'text-xs'}`}>{rule.keyword}</h4>
                       <div className="flex items-center gap-1.5">

@@ -333,12 +333,12 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </section>
 
-        {/* 6-MONTH TREND: Grouped vs Area vs Stacked */}
+        {/* MOMENTUM: Grouped vs Area vs Stacked */}
         <section className={sectionClass}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <LineChartIcon size={12} className="text-indigo-500" />
-              <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">6-Month Momentum</h3>
+              <h3 className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Momentum</h3>
             </div>
             <div className="flex bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg overflow-x-auto no-scrollbar">
                <button onClick={() => { triggerHaptic(); setTrendChartStyle('grouped'); }} className={`p-1 rounded-md transition-all ${trendChartStyle === 'grouped' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}><BarChartIcon size={10} /></button>

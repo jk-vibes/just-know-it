@@ -1,3 +1,4 @@
+
 export type Category = 'Needs' | 'Wants' | 'Savings' | 'Uncategorized';
 export type Frequency = 'None' | 'Weekly' | 'Monthly' | 'Yearly';
 export type IncomeType = 'Salary' | 'Freelance' | 'Investment' | 'Gift' | 'Other';
@@ -46,6 +47,8 @@ export interface Expense {
   sourceAccountId?: string; 
   isMock?: boolean;
   billId?: string; // Optional link to a captured bill
+  ruleId?: string; // Track which rule categorized this
+  isAIUpgraded?: boolean; // Track if AI handled it
 }
 
 export interface Income {
@@ -74,6 +77,7 @@ export interface BudgetRule {
   id: string;
   keyword: string;
   category: Category;
+  subCategory?: string;
 }
 
 export interface RecurringItem {
@@ -125,4 +129,4 @@ export interface UserProfile {
   accessToken?: string;
 }
 
-export type View = 'Dashboard' | 'Transactions' | 'Profile' | 'Add' | 'Auth' | 'Accounts' | 'Budget';
+export type View = 'Dashboard' | 'Ledger' | 'Profile' | 'Add' | 'Auth' | 'Accounts' | 'Budget' | 'Rules';

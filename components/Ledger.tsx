@@ -1,23 +1,21 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Expense, Income, Category, UserSettings, WealthItem, Notification, BudgetRule } from '../types';
-import { CATEGORY_COLORS, getCurrencySymbol } from '../constants';
+import { CATEGORY_COLORS, getCurrencySymbol, SUB_CATEGORIES } from '../constants';
 import { 
   Trash2, Search, X, Sparkles, Loader2, Edit2, 
-  Banknote, History, Wallet, Star, Shield, 
-  Zap, HeartPulse, ShoppingBag, Coffee, 
-  Trophy, TrendingUp, Landmark, CreditCard, 
-  Globe, Bitcoin, Gem, Home, Activity,
-  Plane, Utensils, Gift, Dumbbell, Car,
-  ChevronLeft, ChevronRight, ArrowRightLeft,
+  Banknote, History, Zap, ArrowRightLeft,
   ArrowDownCircle, ArrowUpCircle, Wifi, Smartphone, 
-  Briefcase, Scissors, User, Building2, PiggyBank,
-  BookOpen, Construction, FilterX, FileText,
-  BrainCircuit, Cpu, Wand2, Scale, ChevronRight as ChevronRightIcon,
-  Fingerprint, LayoutList, BarChart3
+  Shield, HeartPulse, ShoppingBag, Coffee, 
+  Trophy, TrendingUp, Home, Car, Utensils, Plane,
+  Gift, Dumbbell, ChevronLeft, ChevronRight,
+  Briefcase, Scissors, Building2, PiggyBank,
+  BookOpen, Construction, FilterX,
+  BrainCircuit, ChevronRight as ChevronRightIcon,
+  Fingerprint, LayoutList, BarChart3, BarChart2,
+  TrendingDown, Activity, AlignLeft, Wand2,
+  Heart, Star, Wallet, CreditCard, Coins, Receipt
 } from 'lucide-react';
-import { auditTransaction, refineBatchTransactions } from '../services/geminiService';
-import { parseSmsLocally } from '../utils/smsParser';
+import { auditTransaction } from '../services/geminiService';
 import { triggerHaptic } from '../utils/haptics';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 
@@ -29,11 +27,10 @@ interface LedgerProps {
   rules?: BudgetRule[];
   onDeleteExpense: (id: string) => void;
   onDeleteIncome: (id: string) => void;
-  onDeleteWealth: (id: string) => void;
   onConfirm: (id: string, category: Category) => void;
   onUpdateExpense: (id: string, updates: Partial<Expense>) => void;
   onEditRecord: (record: Expense | Income | WealthItem) => void;
-  onAddBulk: (items: any[]) => void;
+  onOpenImport: () => void;
   onViewRule?: (ruleId: string) => void;
   viewDate: Date;
   onMonthChange: (direction: number) => void;
@@ -41,53 +38,62 @@ interface LedgerProps {
   addNotification: (notif: Omit<Notification, 'timestamp' | 'read'> & { id?: string }) => void;
 }
 
-const getCategoryIcon = (category: string, subCategory?: string, type?: string, recordType?: string) => {
-  if (recordType === 'balance') return <Scale size={16} />;
+const getCategoryIcon = (category: string, subCategory?: string, type?: string) => {
   const sc = subCategory?.toLowerCase() || '';
   const c = category.toLowerCase();
+  
+  if (sc === 'bill payment') return <CreditCard size={16} />;
   if (sc === 'transfer') return <ArrowRightLeft size={16} />;
-  if (c === 'needs') {
-    if (sc.includes('rent') || sc.includes('mortgage') || sc.includes('home')) return <Home size={16} />;
-    if (sc.includes('fuel') || sc.includes('transport') || sc.includes('car')) return <Car size={16} />;
-    if (sc.includes('grocer')) return <ShoppingBag size={16} />;
-    if (sc.includes('util') || sc.includes('electricity') || sc.includes('water')) return <Zap size={16} />;
-    if (sc.includes('health') || sc.includes('insur') || sc.includes('hospital')) return <HeartPulse size={16} />;
-    if (sc.includes('internet') || sc.includes('wifi')) return <Wifi size={16} />;
-    if (sc.includes('mobile') || sc.includes('phone')) return <Smartphone size={16} />;
-    if (sc.includes('edu') || sc.includes('school')) return <BookOpen size={16} />;
-    if (sc.includes('house') || sc.includes('mainten')) return <Construction size={16} />;
-    return <Shield size={16} />;
-  }
-  if (c === 'wants') {
-    if (sc.includes('din') || sc.includes('eat') || sc.includes('rest')) return <Utensils size={16} />;
-    if (sc.includes('travel') || sc.includes('flight') || sc.includes('hotel')) return <Plane size={16} />;
-    if (sc.includes('ent') || sc.includes('movie') || sc.includes('game')) return <Zap size={16} />;
-    if (sc.includes('gift')) return <Gift size={16} />;
-    if (sc.includes('hobb') || sc.includes('gym')) return <Dumbbell size={16} />;
-    if (sc.includes('coffee') || sc.includes('cafe')) return <Coffee size={16} />;
-    if (sc.includes('apparel') || sc.includes('cloth') || sc.includes('fashion')) return <ShoppingBag size={16} />;
-    if (sc.includes('beauty') || sc.includes('groom') || sc.includes('salon')) return <Scissors size={16} />;
-    return <Star size={16} />;
-  }
-  if (c === 'savings') {
-    if (sc.includes('stock') || sc.includes('fund') || sc.includes('sip')) return <TrendingUp size={16} />;
-    if (sc.includes('gold')) return <Gem size={16} />;
-    if (sc.includes('crypto') || sc.includes('bitcoin')) return <Bitcoin size={16} />;
-    if (sc.includes('emergency')) return <Shield size={16} />;
-    if (sc.includes('real estate')) return <Building2 size={16} />;
-    if (sc.includes('retire') || sc.includes('pension')) return <PiggyBank size={16} />;
-    return <Trophy size={16} />;
-  }
+  if (sc.includes('rent') || sc.includes('mortgage') || sc.includes('home')) return <Home size={16} />;
+  if (sc.includes('fuel') || sc.includes('transport') || sc.includes('car') || sc.includes('uber') || sc.includes('ola')) return <Car size={16} />;
+  if (sc.includes('grocer') || sc.includes('market') || sc.includes('reliance') || sc.includes('blinkit')) return <ShoppingBag size={16} />;
+  if (sc.includes('util') || sc.includes('electricity') || sc.includes('water') || sc.includes('gas')) return <Zap size={16} />;
+  if (sc.includes('health') || sc.includes('insur') || sc.includes('hospital') || sc.includes('med')) return <HeartPulse size={16} />;
+  if (sc.includes('internet') || sc.includes('wifi') || sc.includes('broadband')) return <Wifi size={16} />;
+  if (sc.includes('mobile') || sc.includes('phone') || sc.includes('recharge')) return <Smartphone size={16} />;
+  if (sc.includes('edu') || sc.includes('school') || sc.includes('course')) return <BookOpen size={16} />;
+  if (sc.includes('house') || sc.includes('mainten') || sc.includes('clean')) return <Construction size={16} />;
+  if (sc.includes('din') || sc.includes('eat') || sc.includes('rest') || sc.includes('zomato') || sc.includes('swiggy')) return <Utensils size={16} />;
+  if (sc.includes('travel') || sc.includes('flight') || sc.includes('hotel') || sc.includes('trip')) return <Plane size={16} />;
+  if (sc.includes('ent') || sc.includes('movie') || sc.includes('game') || sc.includes('netflix') || sc.includes('prime')) return <Activity size={16} />;
+  if (sc.includes('gift') || sc.includes('present')) return <Gift size={16} />;
+  if (sc.includes('hobb') || sc.includes('gym') || sc.includes('fit') || sc.includes('workout')) return <Dumbbell size={16} />;
+  if (sc.includes('coffee') || sc.includes('cafe') || sc.includes('starbucks')) return <Coffee size={16} />;
+  if (sc.includes('apparel') || sc.includes('cloth') || sc.includes('fashion') || sc.includes('myntra')) return <ShoppingBag size={16} />;
+  if (sc.includes('beauty') || sc.includes('groom') || sc.includes('salon')) return <Scissors size={16} />;
+  if (sc.includes('sip') || sc.includes('mutual') || sc.includes('fund') || sc.includes('invest')) return <TrendingUp size={16} />;
+  if (sc.includes('gold')) return <Coins size={16} />;
+  if (sc.includes('crypto') || sc.includes('bitcoin')) return <Activity size={16} />;
+  if (sc.includes('real estate') || sc.includes('land')) return <Building2 size={16} />;
+  if (sc.includes('retire') || sc.includes('pension')) return <PiggyBank size={16} />;
+  if (sc.includes('transfer')) return <ArrowRightLeft size={16} />;
+
   if (type === 'Salary') return <Banknote size={16} />;
   if (type === 'Freelance') return <Briefcase size={16} />;
   if (type === 'Investment') return <TrendingUp size={16} />;
   if (type === 'Gift') return <Gift size={16} />;
+
+  if (c === 'needs') return <Shield size={16} />;
+  if (c === 'wants') return <Star size={16} />;
+  if (c === 'savings') return <Trophy size={16} />;
+  
   return <Sparkles size={16} />;
+};
+
+const getParentCategoryIndicator = (category: string, subCategory?: string) => {
+  const c = category.toLowerCase();
+  const sc = subCategory?.toLowerCase() || '';
+  if (sc === 'bill payment') return <CreditCard size={8} className="text-indigo-400" />;
+  if (sc === 'transfer') return <ArrowRightLeft size={8} className="text-slate-400" />;
+  if (c === 'needs') return <Shield size={8} className="text-blue-500" />;
+  if (c === 'wants') return <Heart size={8} className="text-rose-500" />;
+  if (c === 'savings') return <PiggyBank size={8} className="text-emerald-500" />;
+  return <Receipt size={8} className="text-slate-400" />;
 };
 
 const SwipeableItem: React.FC<{
   item: any;
-  recordType: 'expense' | 'income' | 'transfer' | 'balance';
+  recordType: 'expense' | 'income' | 'transfer' | 'bill_payment';
   currencySymbol: string;
   matchedRule?: BudgetRule;
   onDelete: (id: string) => void;
@@ -122,9 +128,9 @@ const SwipeableItem: React.FC<{
     touchStartX.current = null;
   };
 
-  const amount = item.amount || item.value || 0;
+  const amount = item.amount || 0;
   const parentCategory = recordType === 'expense' ? item.category : 'Uncategorized';
-  const themeColor = recordType === 'income' ? '#10b981' : recordType === 'transfer' ? '#6366f1' : recordType === 'balance' ? '#3b82f6' : CATEGORY_COLORS[parentCategory] || '#94a3b8';
+  const themeColor = recordType === 'income' ? '#10b981' : (recordType === 'transfer' || recordType === 'bill_payment') ? '#6366f1' : CATEGORY_COLORS[parentCategory] || '#94a3b8';
   
   const isRuleMatched = !!item.ruleId;
   const isAIUpgraded = item.isAIUpgraded;
@@ -133,9 +139,32 @@ const SwipeableItem: React.FC<{
     e.stopPropagation();
     triggerHaptic();
     if (recordType !== 'expense' || auditLoading) return;
+    
     setAuditLoading(true);
-    const result = await auditTransaction(item, currencySymbol);
-    setAuditResult(result);
+    let suggestedCategory: Category | null = null;
+    const subCat = (item.subCategory || '').toLowerCase().trim();
+
+    if (subCat) {
+      for (const [cat, subList] of Object.entries(SUB_CATEGORIES)) {
+        if (subList.some(s => s.toLowerCase().includes(subCat) || subCat.includes(s.toLowerCase()))) {
+          suggestedCategory = cat as Category;
+          break;
+        }
+      }
+    }
+
+    if (suggestedCategory) {
+      await new Promise(r => setTimeout(r, 400));
+      setAuditResult({
+        isCorrect: item.category === suggestedCategory,
+        suggestedCategory,
+        insight: `Pattern match: "${item.subCategory}" mapped to ${suggestedCategory} hierarchy.`,
+        isAnomaly: false
+      });
+    } else {
+      const result = await auditTransaction(item, currencySymbol);
+      setAuditResult(result);
+    }
     setAuditLoading(false);
   };
 
@@ -150,10 +179,11 @@ const SwipeableItem: React.FC<{
 
   const handleViewRuleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (item.ruleId && onViewRule) {
-      onViewRule(item.ruleId);
-    }
+    if (item.ruleId && onViewRule) onViewRule(item.ruleId);
   };
+
+  // Primary Title: Sub-category for Expenses, Type for Income
+  const primaryTitle = recordType === 'income' ? item.type : (recordType === 'transfer' || recordType === 'bill_payment') ? item.subCategory : (item.subCategory || item.category);
 
   return (
     <div className={`relative overflow-hidden transition-all duration-300 ${isDeleting ? 'max-h-0 opacity-0' : 'max-h-[600px] opacity-100'} animate-slide-up`}>
@@ -170,36 +200,43 @@ const SwipeableItem: React.FC<{
         <div className="flex items-center justify-between">
           <div className="flex items-start gap-3 overflow-hidden">
             <div className="w-10 h-10 flex items-center justify-center shrink-0 rounded-xl mt-0.5" style={{ backgroundColor: `${themeColor}15`, color: themeColor }}>
-              {getCategoryIcon(parentCategory, item.subCategory, recordType === 'income' ? item.type : undefined, recordType)}
+              {getCategoryIcon(parentCategory, item.subCategory, recordType === 'income' ? item.type : undefined)}
             </div>
             <div className="min-w-0 flex flex-col">
               <div className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
                 <h4 className="font-extrabold text-slate-800 dark:text-slate-200 text-[13px] truncate leading-tight">
-                  {recordType === 'income' ? item.type : recordType === 'transfer' ? 'Transfer' : recordType === 'balance' ? 'Balance Snapshot' : item.subCategory || item.category}
+                  {primaryTitle}
                 </h4>
                 {isRuleMatched && <Zap size={8} className="text-emerald-500 fill-emerald-500 shrink-0" />}
                 {isAIUpgraded && <Sparkles size={8} className="text-indigo-400 shrink-0" />}
-                {recordType === 'expense' && !item.isConfirmed && !isAIUpgraded && !isRuleMatched && <div className="w-1.5 h-1.5 bg-amber-400 rounded-full animate-pulse shrink-0" />}
               </div>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-[7px] font-black uppercase tracking-wider px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
-                  {item.merchant || item.name || 'General'}
+                  {item.merchant || 'General'}
                 </span>
                 <span className="text-[7px] text-slate-300 dark:text-slate-600 font-black">•</span>
-                <p className="text-[7px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">
-                  {new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                </p>
+                <div className="flex items-center gap-1">
+                   {(recordType === 'expense' || recordType === 'bill_payment' || recordType === 'transfer') && (
+                     <div className="flex items-center gap-1 mr-1">
+                        {getParentCategoryIndicator(item.category, item.subCategory)}
+                        <span className="text-[6px] font-black uppercase text-slate-400 tracking-tighter">{item.subCategory === 'Bill Payment' ? 'Settlement' : item.category}</span>
+                     </div>
+                   )}
+                   <p className="text-[7px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">
+                     {new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                   </p>
+                </div>
               </div>
             </div>
           </div>
           <div className="text-right flex items-center gap-3 shrink-0 ml-2">
             <div>
-              <p className={`font-black text-[15px] tracking-tight ${recordType === 'income' ? 'text-emerald-500' : recordType === 'transfer' ? 'text-indigo-500' : recordType === 'balance' ? 'text-blue-500' : 'text-slate-900 dark:text-white'}`}>
-                {recordType === 'income' ? '+' : recordType === 'transfer' ? '⇅' : recordType === 'balance' ? 'Σ' : '-'}{currencySymbol}{Math.round(amount).toLocaleString()}
+              <p className={`font-black text-[15px] tracking-tight ${recordType === 'income' ? 'text-emerald-500' : (recordType === 'transfer' || recordType === 'bill_payment') ? 'text-indigo-500' : 'text-slate-900 dark:text-white'}`}>
+                {recordType === 'income' ? '+' : (recordType === 'transfer' || recordType === 'bill_payment') ? '⇅' : '-'}{currencySymbol}{Math.round(amount).toLocaleString()}
               </p>
               {recordType === 'expense' && !auditResult && !isAIUpgraded && !isRuleMatched && (
                 <button onClick={handleAudit} className="text-indigo-400 opacity-50 hover:opacity-100 transition-transform active:scale-90 mt-1">
-                  {auditLoading ? <Loader2 size={10} className="animate-spin" /> : <BrainCircuit size={10} />}
+                  {auditLoading ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
                 </button>
               )}
             </div>
@@ -241,15 +278,12 @@ const SwipeableItem: React.FC<{
 };
 
 const Ledger: React.FC<LedgerProps> = ({ 
-  expenses, incomes, wealthItems, settings, rules = [], onDeleteExpense, onDeleteIncome, onDeleteWealth, onEditRecord, onAddBulk, onViewRule, viewDate, onMonthChange, addNotification, onUpdateExpense
+  expenses, incomes, wealthItems, settings, rules = [], onDeleteExpense, onDeleteIncome, onEditRecord, onOpenImport, onViewRule, viewDate, onMonthChange, onUpdateExpense
 }) => {
-  const [filterType, setFilterType] = useState<'all' | 'expense' | 'income' | 'transfer'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'expense' | 'income' | 'transfer' | 'bill_payment'>('all');
   const [viewMode, setViewMode] = useState<'list' | 'compare'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [importText, setImportText] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   const currencySymbol = getCurrencySymbol(settings.currency);
   const monthLabelCompact = `${viewDate.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}'${viewDate.getFullYear().toString().slice(-2)}`;
@@ -257,7 +291,7 @@ const Ledger: React.FC<LedgerProps> = ({
   const currentMonthTotals = useMemo(() => {
     const m = viewDate.getMonth();
     const y = viewDate.getFullYear();
-    const exps = expenses.filter(e => e.subCategory !== 'Transfer' && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y).reduce((sum, e) => sum + e.amount, 0);
+    const exps = expenses.filter(e => !['Transfer', 'Bill Payment'].includes(e.subCategory || '') && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y).reduce((sum, e) => sum + e.amount, 0);
     const incs = incomes.filter(i => new Date(i.date).getMonth() === m && new Date(i.date).getFullYear() === y).reduce((sum, i) => sum + i.amount, 0);
     return { income: incs, expense: exps, delta: incs - exps };
   }, [expenses, incomes, viewDate]);
@@ -271,45 +305,27 @@ const Ledger: React.FC<LedgerProps> = ({
     const m = viewDate.getMonth();
     const y = viewDate.getFullYear();
     const q = searchQuery.toLowerCase().trim();
-    const exps = expenses.filter(e => e.subCategory !== 'Transfer' && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y).map(e => ({ ...e, recordType: 'expense' as const }));
+    const exps = expenses.filter(e => !['Transfer', 'Bill Payment'].includes(e.subCategory || '') && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y).map(e => ({ ...e, recordType: 'expense' as const }));
     const incs = incomes.filter(i => new Date(i.date).getMonth() === m && new Date(i.date).getFullYear() === y).map(i => ({ ...i, recordType: 'income' as const }));
     const transfers = expenses.filter(e => e.subCategory === 'Transfer' && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y).map(e => ({ ...e, recordType: 'transfer' as const }));
+    const billPayments = expenses.filter(e => e.subCategory === 'Bill Payment' && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y).map(e => ({ ...e, recordType: 'bill_payment' as const }));
     
     let list: any[] = [];
-    if (filterType === 'all') list = [...exps, ...incs, ...transfers];
+    if (filterType === 'all') list = [...exps, ...incs, ...transfers, ...billPayments];
     else if (filterType === 'expense') list = exps;
     else if (filterType === 'income') list = incs;
     else if (filterType === 'transfer') list = transfers;
+    else if (filterType === 'bill_payment') list = billPayments;
     
     list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     if (!q) return list;
     return list.filter(rec => {
-      const name = (rec.merchant || rec.note || rec.name || '').toLowerCase();
+      const name = (rec.merchant || rec.note || '').toLowerCase();
       const cat = (rec.category || rec.type || '').toLowerCase();
-      return name.includes(q) || cat.includes(q) || rec.amount?.toString().includes(q) || rec.value?.toString().includes(q);
+      const sub = (rec.subCategory || '').toLowerCase();
+      return name.includes(q) || cat.includes(q) || sub.includes(q) || rec.amount?.toString().includes(q);
     });
   }, [filterType, expenses, incomes, viewDate, searchQuery]);
-
-  const handleBatchImport = async (textToProcess: string) => {
-    if (!textToProcess.trim()) return;
-    triggerHaptic();
-    setIsAnalyzing(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    try {
-      const results = parseSmsLocally(textToProcess);
-      if (results?.length > 0) {
-        onAddBulk(results);
-        setShowImportModal(false);
-        setImportText('');
-      } else {
-        alert("Failed to identify valid financial patterns. Ensure headers are present.");
-      }
-    } catch (err) { 
-      alert("Inflow processing failed.");
-    } finally { 
-      setIsAnalyzing(false); 
-    }
-  };
 
   const handleFilterToggle = (type: typeof filterType) => {
     triggerHaptic();
@@ -337,7 +353,7 @@ const Ledger: React.FC<LedgerProps> = ({
                <Search size={14} />
              </button>
              <button 
-               onClick={() => { triggerHaptic(); setShowImportModal(true); }} 
+               onClick={() => { triggerHaptic(); onOpenImport(); }} 
                className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all active:scale-90"
              >
                <Sparkles size={14} />
@@ -356,9 +372,32 @@ const Ledger: React.FC<LedgerProps> = ({
                 <h2 className="text-[10px] font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest leading-none">{monthLabelCompact}</h2>
               </div>
               <button onClick={() => (triggerHaptic(), onMonthChange(1))} className="p-1.5 text-slate-400 hover:text-brand-primary transition-colors active:scale-90"><ChevronRight size={14} strokeWidth={3} /></button>
+              
+              {/* Inline Filters */}
+              {viewMode === 'list' && (
+                <div className="flex items-center gap-0.5 ml-2 pl-2 border-l border-slate-200 dark:border-slate-700">
+                  <button onClick={() => handleFilterToggle('expense')} className={`p-1.5 rounded-lg transition-all active:scale-90 ${filterType === 'expense' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-400'}`}>
+                    <TrendingDown size={14} strokeWidth={3} />
+                  </button>
+                  <button onClick={() => handleFilterToggle('income')} className={`p-1.5 rounded-lg transition-all active:scale-90 ${filterType === 'income' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-400'}`}>
+                    <TrendingUp size={14} strokeWidth={3} />
+                  </button>
+                  <button onClick={() => handleFilterToggle('transfer')} className={`p-1.5 rounded-lg transition-all active:scale-90 ${filterType === 'transfer' ? 'bg-indigo-500 text-white shadow-sm' : 'text-slate-400'}`}>
+                    <Activity size={14} strokeWidth={3} />
+                  </button>
+                  <button onClick={() => handleFilterToggle('bill_payment')} className={`p-1.5 rounded-lg transition-all active:scale-90 ${filterType === 'bill_payment' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400'}`}>
+                    <CreditCard size={14} strokeWidth={3} />
+                  </button>
+                  {filterType !== 'all' && (
+                    <button onClick={() => (triggerHaptic(), setFilterType('all'))} className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors">
+                      <FilterX size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             
-            <div className="flex items-center bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-100 dark:border-slate-700">
+            <div className="flex items-center bg-slate-50 dark:bg-slate-800 p-1 rounded-xl border border-slate-100 dark:border-slate-700 shrink-0">
               <button 
                 onClick={() => handleModeToggle('list')} 
                 className={`p-1.5 rounded-lg transition-all active:scale-90 ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-brand-primary shadow-sm' : 'text-slate-400'}`}
@@ -375,43 +414,6 @@ const Ledger: React.FC<LedgerProps> = ({
               </button>
             </div>
           </div>
-
-          {viewMode === 'list' && (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1">
-                <button 
-                  onClick={() => handleFilterToggle('expense')} 
-                  className={`p-2 rounded-xl border transition-all active:scale-90 ${filterType === 'expense' ? 'bg-rose-500 border-rose-500 text-white' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400'}`}
-                  title="Expenses"
-                >
-                  <ArrowDownCircle size={14} />
-                </button>
-                <button 
-                  onClick={() => handleFilterToggle('income')} 
-                  className={`p-2 rounded-xl border transition-all active:scale-90 ${filterType === 'income' ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400'}`}
-                  title="Income"
-                >
-                  <ArrowUpCircle size={14} />
-                </button>
-                <button 
-                  onClick={() => handleFilterToggle('transfer')} 
-                  className={`p-2 rounded-xl border transition-all active:scale-90 ${filterType === 'transfer' ? 'bg-indigo-500 border-indigo-500 text-white' : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400'}`}
-                  title="Transfers"
-                >
-                  <ArrowRightLeft size={14} />
-                </button>
-                {filterType !== 'all' && (
-                  <button 
-                    onClick={() => (triggerHaptic(), setFilterType('all'))} 
-                    className="p-2 text-slate-300 hover:text-slate-500 transition-colors"
-                    title="Clear Filter"
-                  >
-                    <FilterX size={14} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
 
           {isSearchOpen && viewMode === 'list' && (
             <div className="animate-kick">
@@ -459,7 +461,7 @@ const Ledger: React.FC<LedgerProps> = ({
                   recordType={rec.recordType} 
                   currencySymbol={currencySymbol} 
                   matchedRule={rules.find(r => r.id === rec.ruleId)}
-                  onDelete={rec.recordType === 'income' ? onDeleteIncome : rec.recordType === 'balance' ? onDeleteWealth : onDeleteExpense} 
+                  onDelete={rec.recordType === 'income' ? onDeleteIncome : onDeleteExpense} 
                   onEdit={onEditRecord} 
                   onViewRule={onViewRule}
                   onUpdateExpense={onUpdateExpense}
@@ -487,11 +489,6 @@ const Ledger: React.FC<LedgerProps> = ({
                 <h2 className={`text-4xl font-black tracking-tighter ${currentMonthTotals.delta >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                   {currentMonthTotals.delta >= 0 ? '+' : ''}{currencySymbol}{Math.abs(currentMonthTotals.delta).toLocaleString()}
                 </h2>
-                <div className="mt-4 flex items-center justify-center gap-2">
-                  <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase ${currentMonthTotals.delta >= 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                    {currentMonthTotals.delta >= 0 ? 'Surplus Protocol' : 'Deficit Protocol'}
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -534,23 +531,6 @@ const Ledger: React.FC<LedgerProps> = ({
           </div>
         )}
       </div>
-
-      {showImportModal && (
-        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-950 w-full rounded-t-3xl shadow-2xl flex flex-col max-h-[85vh]">
-             <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-                <h3 className="text-xs font-black uppercase dark:text-white tracking-widest">Import to Ledger</h3>
-                <button onClick={() => setShowImportModal(false)} className="p-2 bg-slate-100 dark:bg-slate-900 rounded-full text-slate-400"><X size={18} /></button>
-             </div>
-             <div className="p-6 space-y-4">
-                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Paste CSV or banking logs here..." className="w-full h-44 bg-slate-50 dark:bg-slate-500/10 p-4 rounded-2xl text-[11px] font-medium outline-none border border-slate-100 dark:border-slate-800 dark:text-white resize-none" />
-                <button onClick={() => handleBatchImport(importText)} disabled={!importText || isAnalyzing} className="w-full bg-slate-900 dark:bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest disabled:opacity-50 transition-all active:scale-95">
-                  {isAnalyzing ? <Loader2 size={16} className="animate-spin" /> : 'Direct Ledger Ingestion'}
-                </button>
-             </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
