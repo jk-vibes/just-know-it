@@ -1,16 +1,14 @@
-
 export type Category = 'Needs' | 'Wants' | 'Savings' | 'Uncategorized';
 export type Frequency = 'None' | 'Weekly' | 'Monthly' | 'Yearly';
 export type IncomeType = 'Salary' | 'Freelance' | 'Investment' | 'Gift' | 'Other';
-export type AppTheme = 'Spiderman' | 'CaptainAmerica' | 'Naruto';
+export type AppTheme = 'Spiderman' | 'CaptainAmerica' | 'Naruto' | 'Batman' | 'McQueen' | 'Frozen';
 export type PaymentMethod = 'UPI' | 'Card' | 'Cash' | 'Net Banking' | 'Other';
 export type DensityLevel = 'Normal' | 'Simple' | 'Compact';
 
 export type WealthType = 'Investment' | 'Liability';
 export type WealthCategory = 
-  | 'Stock' | 'Mutual Fund' | 'Crypto' | 'Gold' | 'Real Estate' 
-  | 'Loan' | 'Credit Card' | 'Other'
-  | 'Checking Account' | 'Savings Account' | 'Cash';
+  | 'Savings' | 'Overdraft' | 'Cash' | 'Investment'
+  | 'Card' | 'Loan' | 'Other';
 
 export interface BudgetItem {
   id: string;
@@ -66,7 +64,8 @@ export interface WealthItem {
   id: string;
   type: WealthType;
   category: WealthCategory;
-  name: string;
+  name: string; // The raw label used for mapping
+  alias?: string; // Friendly display name
   value: number;
   limit?: number;
   date: string;

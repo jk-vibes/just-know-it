@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { UserSettings, UserProfile, AppTheme, Category } from '../types';
 import { SUPPORTED_CURRENCIES } from '../constants';
@@ -34,6 +33,58 @@ interface SettingsProps {
   wealthItems?: any[];
 }
 
+const NarutoSageEye = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
+    <path d="M22 6C18 4 10 7 8 11C10 15 17 21 21 18C19 14 20 6 22 6Z" fill="#F97316" />
+    <path d="M2 12C2 12 5 7 11 7C17 7 20 12 20 12C20 12 17 17 11 17C5 17 2 12 2 12Z" fill="white" stroke="black" strokeWidth="0.5" />
+    <circle cx="11" cy="12" r="3.5" fill="#FACC15" />
+    <rect x="9.5" y="11.5" width="3" height="1" rx="0.2" fill="black" />
+  </svg>
+);
+
+const SpidermanIcon = () => (
+  <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-md">
+    <path d="M12 10.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5zm0 8.5c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4zm8-10.5c-1.5-.5-3.5-1-5-1 .3-.3.5-.7.5-1.1 0-.8-.7-1.4-1.5-1.4s-1.5.6-1.5 1.4c0 .4.2.8.5 1.1-1.5 0-3.5.5-5 1-1.5.5-2.5 1.5-2.5 3 0 .5.1.9.2 1.3L2 14c-.3.2-.4.6-.2.9.2.3.6.4.9.2l3.2-2.1c.3.5.7.9 1.1 1.3L4.5 19c-.2.3-.1.7.2.9.3.2.7.1.9-.2l2.4-4.5c.6.4 1.3.7 2 .9V22c0 .3.3.6.6.6s.6-.3.6-.6v-5.7c.4.1.8.1 1.2.1s.8 0 1.2-.1V22c0 .3.3.6.6.6s.6-.3.6-.6v-5.9c.7-.2 1.4-.5 2-.9l2.4 4.5c.2.3.6.4.9.2.3-.2.4-.6.2-.9l-2.5-4.7c.4-.4.8-.8 1.1-1.3l3.2 2.1c.3.2.7.1.9-.2.2-.3.1-.7-.2-.9l-3.2-2.1c.1-.4.2-.8.2-1.3 0-1.5-1-2.5-2.5-3z" />
+  </svg>
+);
+
+const CaptainAmericaIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-md">
+    <circle cx="12" cy="12" r="11" fill="#0369a1" />
+    <circle cx="12" cy="12" r="8" stroke="white" strokeWidth="2" />
+    <circle cx="12" cy="12" r="5" fill="#dc2626" />
+    <path d="M12 9L12.8 10.8H14.8L13.2 12L13.8 14L12 12.8L10.2 14L10.8 12L9.2 10.8H11.2L12 9Z" fill="white" />
+  </svg>
+);
+
+const BatmanIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
+    <ellipse cx="12" cy="12" rx="11" ry="7" fill="#facc15" />
+    <path d="M12 7.5C10.5 7.5 9.5 9 8 9C7.5 9 7 8.5 6.5 8C5.5 8.5 5 10.5 5 12C5 14 6.5 16 12 16.5C17.5 16 19 14 19 12C19 10.5 18.5 8.5 17.5 8C17 8.5 16.5 9 16 9C14.5 9 13.5 7.5 12 7.5Z" fill="black" />
+    <path d="M11 7.5V6.5L10 7.5H11ZM13 7.5V6.5L14 7.5H13Z" fill="black" />
+  </svg>
+);
+
+const McQueenIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
+    <rect width="22" height="12" x="1" y="6" rx="3" fill="#ef4444" />
+    <path d="M5 11L7 8H17L19 11" stroke="white" strokeWidth="1.5" />
+    <path d="M4 14L20 12" stroke="#facc15" strokeWidth="2" strokeLinecap="round" />
+    <circle cx="6" cy="16" r="3" fill="black" />
+    <circle cx="18" cy="16" r="3" fill="black" />
+    <circle cx="6" cy="16" r="1" fill="#64748b" />
+    <circle cx="18" cy="16" r="1" fill="#64748b" />
+  </svg>
+);
+
+const FrozenIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
+    <path d="M12 2V22M2 12H22M5 5L19 19M19 5L5 19" stroke="#0ea5e9" strokeWidth="2" strokeLinecap="round" />
+    <path d="M12 6L10 4M12 6L14 4M12 18L10 20M12 18L14 20M6 12L4 10M6 12L4 14M18 12L20 10M18 12L20 14" stroke="#0ea5e9" strokeWidth="1.5" strokeLinecap="round" />
+    <circle cx="12" cy="12" r="3" fill="white" stroke="#0ea5e9" strokeWidth="0.5" />
+  </svg>
+);
+
 const Settings: React.FC<SettingsProps> = ({ 
   settings, user, onLogout, onReset, onToggleTheme, onUpdateAppTheme, onUpdateCurrency, 
   onUpdateSplit, onSync, onExport, onImport, onAddBulk, isSyncing, onLoadMockData, onPurgeMockData, onPurgeAllData,
@@ -53,10 +104,13 @@ const Settings: React.FC<SettingsProps> = ({
 
   const currentCurrency = SUPPORTED_CURRENCIES.find(c => c.code === settings.currency) || SUPPORTED_CURRENCIES[0];
 
-  const themes: { id: AppTheme, label: string, color: string }[] = [
-    { id: 'Spiderman', label: 'Spidey', color: 'bg-rose-500' },
-    { id: 'CaptainAmerica', label: 'Cap', color: 'bg-blue-600' },
-    { id: 'Naruto', label: 'Naruto', color: 'bg-orange-500' }
+  const themes: { id: AppTheme, icon: React.ReactNode }[] = [
+    { id: 'Spiderman', icon: <SpidermanIcon /> },
+    { id: 'CaptainAmerica', icon: <CaptainAmericaIcon /> },
+    { id: 'Naruto', icon: <NarutoSageEye /> },
+    { id: 'Batman', icon: <BatmanIcon /> },
+    { id: 'McQueen', icon: <McQueenIcon /> },
+    { id: 'Frozen', icon: <FrozenIcon /> }
   ];
 
   const handleUpdateTempSplit = (cat: Category, val: number) => {
@@ -112,21 +166,19 @@ const Settings: React.FC<SettingsProps> = ({
     triggerHaptic();
     setIsAnalyzing(true);
     
-    // Artificial delay to simulate heavy ingestion protocol
     await new Promise(resolve => setTimeout(resolve, 1200));
 
     try {
       const results = parseSmsLocally(importText);
       if (results?.length > 0) {
-        // Direct ingestion into ledger without audit review step
         onAddBulk(results);
         setShowImportModal(false);
         setImportText('');
       } else {
-        alert("Found no valid transaction or account data. Ensure CSV headers are correctly mapped.");
+        alert("Found no valid transaction or account data.");
       }
     } catch (err) { 
-      alert("Parsing error. Port sequence interrupted.");
+      alert("Parsing error.");
     } finally { 
       setIsAnalyzing(false); 
     }
@@ -152,20 +204,43 @@ const Settings: React.FC<SettingsProps> = ({
       <div>
         <section className={sectionClass}>
           <div className="p-4">
-            <h3 className={labelClass}><Palette size={10} /> Visual Aesthetics</h3>
-            <div className="flex gap-2 mb-4">
-              <button onClick={onToggleTheme} className={`flex-1 py-3 px-4 rounded-xl border flex items-center justify-between transition-all active:scale-[0.98] ${isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
-                <span className="text-[10px] font-black uppercase">{isDark ? 'Dark Mode' : 'Light Mode'}</span>
-                {isDark ? <Moon size={14} className="text-indigo-400" /> : <Sun size={14} className="text-amber-500" />}
-              </button>
-            </div>
-            <div className="flex gap-2">
-              {themes.map(t => (
-                <button key={t.id} onClick={() => onUpdateAppTheme(t.id)} className={`flex-1 py-2.5 rounded-xl border transition-all active:scale-95 flex flex-col items-center gap-1.5 ${settings.appTheme === t.id ? 'border-brand-primary bg-brand-primary/5 text-brand-primary' : 'border-slate-100 dark:border-slate-800 text-slate-400'}`}>
-                  <div className={`w-2 h-2 rounded-full ${t.color}`} />
-                  <span className="text-[8px] font-black uppercase tracking-tight">{t.label}</span>
+            <h3 className={labelClass}><Palette size={10} /> Visual Identity</h3>
+            
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-black text-slate-500 uppercase">Ambience</p>
+                <button 
+                  onClick={() => { triggerHaptic(); onToggleTheme(); }} 
+                  className={`w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all active:scale-90 ${
+                    isDark ? 'bg-slate-800 border-slate-700 text-indigo-400' : 'bg-slate-50 border-slate-200 text-amber-500'
+                  }`}
+                >
+                  {isDark ? <Moon size={18} strokeWidth={2.5} /> : <Sun size={18} strokeWidth={2.5} />}
                 </button>
-              ))}
+              </div>
+
+              <div className="grid grid-cols-6 gap-2">
+                {themes.map(t => (
+                  <button 
+                    key={t.id} 
+                    onClick={() => { triggerHaptic(); onUpdateAppTheme(t.id); }} 
+                    className={`aspect-square rounded-xl border-2 transition-all active:scale-90 flex items-center justify-center p-1 relative ${
+                      settings.appTheme === t.id 
+                        ? 'border-brand-primary bg-brand-primary/10 scale-110 shadow-md z-10' 
+                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900'
+                    }`}
+                  >
+                    <div className="w-full h-full flex items-center justify-center">
+                      {t.icon}
+                    </div>
+                    {settings.appTheme === t.id && (
+                      <div className="absolute -top-1 -right-1 bg-brand-primary text-white p-0.5 rounded-full ring-1 ring-white dark:ring-slate-950">
+                        <Check size={6} strokeWidth={5} />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -282,45 +357,26 @@ const Settings: React.FC<SettingsProps> = ({
                 <button onClick={() => { triggerHaptic(); setShowImportModal(false); }} className="p-2 bg-slate-100 dark:bg-slate-900 rounded-full text-slate-400 active:scale-90 transition-transform"><X size={18} /></button>
              </div>
              <div className="p-6 overflow-y-auto no-scrollbar space-y-4">
-                <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-3 rounded-2xl border border-indigo-100/50 dark:border-indigo-800/30 flex items-center justify-between">
-                  <p className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 leading-relaxed uppercase pr-4">
-                    Universal Ingestion: Detects accounts, expenses, transfers, and income. Data is committed directly to the ledger.
-                  </p>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => { triggerHaptic(); csvFileInputRef.current?.click(); }} 
-                      disabled={isReadingFile}
-                      className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-lg active:scale-90 transition-all flex items-center justify-center shrink-0"
-                      title="Upload CSV File"
-                    >
-                      {isReadingFile ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-                    </button>
-                    <input type="file" ref={csvFileInputRef} onChange={handleCsvFileChange} accept=".txt,.csv,.log" className="hidden" />
-                  </div>
+                <div className="relative">
+                  <textarea 
+                    value={importText} 
+                    onChange={(e) => setImportText(e.target.value)} 
+                    placeholder="Paste CSV rows or banking financial logs here..." 
+                    className="w-full h-44 bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl text-[11px] font-medium outline-none border border-slate-100 dark:border-slate-800 dark:text-white resize-none transition-all focus:border-brand-primary" 
+                  />
                 </div>
-
-                <div className="space-y-4">
-                  <div className="relative">
-                    <textarea 
-                      value={importText} 
-                      onChange={(e) => setImportText(e.target.value)} 
-                      placeholder="Paste CSV rows or banking financial logs here..." 
-                      className="w-full h-44 bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl text-[11px] font-medium outline-none border border-slate-100 dark:border-slate-800 dark:text-white resize-none transition-all focus:border-brand-primary" 
-                    />
-                  </div>
-                  
-                  <button onClick={handleBatchImport} disabled={!importText || isAnalyzing} className="w-full bg-slate-900 dark:bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 text-[10px] uppercase tracking-[0.2em] disabled:opacity-50 transition-all active:scale-[0.98]">
-                    {isAnalyzing ? (
-                      <>
-                        <Loader2 size={18} className="animate-spin" /> Processing Ledger...
-                      </>
-                    ) : (
-                      <>
-                        <Zap size={18} /> Commit to Ledger
-                      </>
-                    )}
-                  </button>
-                </div>
+                
+                <button onClick={handleBatchImport} disabled={!importText || isAnalyzing} className="w-full bg-slate-900 dark:bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 text-[10px] uppercase tracking-[0.2em] disabled:opacity-50 transition-all active:scale-[0.98]">
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" /> Processing Ledger...
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={18} /> Commit to Ledger
+                    </>
+                  )}
+                </button>
              </div>
           </div>
         </div>

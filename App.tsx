@@ -21,7 +21,7 @@ import { syncToGoogleDrive, restoreFromGoogleDrive, BackupData } from './service
 import { triggerHaptic } from './utils/haptics';
 import { parseSmsLocally } from './utils/smsParser';
 
-const STORAGE_KEY = 'jk_budget_data_whole_num_v10';
+const STORAGE_KEY = 'jk_budget_data_whole_num_v11';
 const INSIGHT_CACHE_KEY = 'jk_ai_insights_cache';
 
 const INITIAL_SETTINGS: UserSettings = {
@@ -228,9 +228,9 @@ const App: React.FC = () => {
   const generateMockData = useCallback(() => {
     const newExpenses: Expense[] = []; const newIncomes: Income[] = []; const newWealth: WealthItem[] = [];
     const today = new Date();
-    newWealth.push({ id: 'mock-w1', type: 'Investment', category: 'Checking Account', name: 'Primary Bank (HDFC)', value: 485000, date: today.toISOString(), isMock: true });
-    newWealth.push({ id: 'mock-w2', type: 'Investment', category: 'Savings Account', name: 'Emergency Vault', value: 1250000, date: today.toISOString(), isMock: true });
-    newWealth.push({ id: 'mock-w7', type: 'Liability', category: 'Loan', name: 'Home Mortgage', value: 4500000, date: today.toISOString(), isMock: true });
+    newWealth.push({ id: 'mock-w1', type: 'Investment', category: 'Savings', name: 'Primary Bank (HDFC)', alias: 'HDFC Savings', value: 485000, date: today.toISOString(), isMock: true });
+    newWealth.push({ id: 'mock-w2', type: 'Investment', category: 'Savings', name: 'Emergency Vault', alias: 'Buffer Fund', value: 1250000, date: today.toISOString(), isMock: true });
+    newWealth.push({ id: 'mock-w7', type: 'Liability', category: 'Loan', name: 'Home Mortgage', alias: 'House Loan', value: 4500000, date: today.toISOString(), isMock: true });
     const merchantPools: Record<Category, { name: string, sub: string, min: number, max: number }[]> = {
       Needs: [{ name: 'Reliance Fresh', sub: 'Groceries', min: 800, max: 4500 }, { name: 'Shell Fuel', sub: 'Fuel/Transport', min: 1500, max: 3500 }, { name: 'Adani Electricity', sub: 'Utilities', min: 2000, max: 6000 }],
       Wants: [{ name: 'Starbucks', sub: 'Dining', min: 350, max: 1200 }, { name: 'Netflix', sub: 'Subscription', min: 199, max: 649 }, { name: 'Amazon India', sub: 'Shopping', min: 500, max: 8000 }],
@@ -292,10 +292,15 @@ const App: React.FC = () => {
 
   const handleTransfer = (fromId: string, toId: string, amount: number, date: string, note: string) => {
     setWealthItems(prev => prev.map(w => {
-      if (w.id === fromId) return { ...w, value: w.value - amount };
-      if (w.id === toId) return { ...w, value: w.value + amount };
+      if (w.id === fromId) {
+        return { ...w, value: w.type === 'Liability' ? w.value + amount : w.value - amount };
+      }
+      if (w.id === toId) {
+        return { ...w, value: w.type === 'Liability' ? w.value - amount : w.value + amount };
+      }
       return w;
     }));
+    
     const transferId = Math.random().toString(36).substring(2, 11);
     setExpenses(prev => [...prev, { id: transferId, amount, date, category: 'Uncategorized', subCategory: 'Transfer', merchant: `Transfer`, note: note || 'Internal', isConfirmed: true, sourceAccountId: fromId }]);
     setIsAddingRecord(false);
@@ -303,14 +308,32 @@ const App: React.FC = () => {
 
   const handleAddExpense = (expense: Omit<Expense, 'id'>, frequency: Frequency) => {
     const id = Math.random().toString(36).substring(2, 11);
-    setExpenses(prev => [...prev, { ...expense, id, amount: Math.round(expense.amount) }]);
-    if (expense.sourceAccountId) setWealthItems(prev => prev.map(w => w.id === expense.sourceAccountId ? { ...w, value: w.value - Math.round(expense.amount) } : w));
+    const roundedAmt = Math.round(expense.amount);
+    setExpenses(prev => [...prev, { ...expense, id, amount: roundedAmt }]);
+    
+    if (expense.sourceAccountId) {
+      setWealthItems(prev => prev.map(w => {
+        if (w.id === expense.sourceAccountId) {
+          return { ...w, value: w.type === 'Liability' ? w.value + roundedAmt : w.value - roundedAmt };
+        }
+        return w;
+      }));
+    }
     setIsAddingRecord(false);
   };
 
   const handleAddIncome = (income: Omit<Income, 'id'>) => {
-    setIncomes(prev => [...prev, { ...income, amount: Math.round(income.amount), id: Math.random().toString(36).substring(2, 11) }]);
-    if (income.targetAccountId) setWealthItems(prev => prev.map(w => w.id === income.targetAccountId ? { ...w, value: w.value + Math.round(income.amount) } : w));
+    const roundedAmt = Math.round(income.amount);
+    setIncomes(prev => [...prev, { ...income, amount: roundedAmt, id: Math.random().toString(36).substring(2, 11) }]);
+    
+    if (income.targetAccountId) {
+      setWealthItems(prev => prev.map(w => {
+        if (w.id === income.targetAccountId) {
+          return { ...w, value: w.type === 'Liability' ? w.value - roundedAmt : w.value + roundedAmt };
+        }
+        return w;
+      }));
+    }
     setIsAddingRecord(false);
   };
 
@@ -328,58 +351,63 @@ const App: React.FC = () => {
   };
 
   const handleAddBulk = async (unvalidatedItems: any[]) => {
-    let expCount = 0; let incCount = 0; let dupCount = 0; let accCreatedCount = 0;
+    let expCount = 0; let incCount = 0; let dupCount = 0;
     const newExpensesToCommit: Expense[] = [];
     const newIncomesToCommit: Income[] = [];
     const newAccountsToProvision: WealthItem[] = [];
     
     let currentLocalWealth = [...wealthItems];
-    const defaultAccount = currentLocalWealth.find(w => ['Checking Account', 'Cash'].includes(w.category)) || currentLocalWealth[0];
+    const defaultAccount = currentLocalWealth.find(w => ['Savings', 'Cash'].includes(w.category)) || currentLocalWealth[0];
     const accountBalanceUpdates: Record<string, number> = {};
 
-    unvalidatedItems.forEach(item => {
-      let accountName = (item.accountName || item.merchant || item.source || '').trim();
-      let activeAccountId = '';
+    const batchFingerprints = new Set<string>();
 
-      if (accountName) {
-        const itemLowerName = accountName.toLowerCase();
-        const existingAcc = currentLocalWealth.find(w => 
-          w.name.toLowerCase() === itemLowerName || 
-          w.name.toLowerCase().includes(itemLowerName) || 
-          itemLowerName.includes(w.name.toLowerCase())
+    unvalidatedItems.forEach(item => {
+      let accountNameKey = (item.accountName || item.merchant || item.source || '').trim();
+      let activeAccount: WealthItem | undefined;
+
+      if (accountNameKey) {
+        const itemLowerKey = accountNameKey.toLowerCase();
+        activeAccount = currentLocalWealth.find(w => 
+          w.name.toLowerCase() === itemLowerKey || 
+          w.name.toLowerCase().includes(itemLowerKey) || 
+          itemLowerKey.includes(w.name.toLowerCase())
         );
         
-        if (existingAcc) {
-          activeAccountId = existingAcc.id;
-        } else {
+        if (!activeAccount) {
           const newAccId = Math.random().toString(36).substring(2, 11);
-          const newAcc: WealthItem = {
+          const isCardHint = accountNameKey.toLowerCase().includes('card');
+          activeAccount = {
             id: newAccId,
-            name: accountName || 'Imported Account',
+            name: accountNameKey, 
+            alias: accountNameKey, 
             value: 0,
-            type: 'Investment',
-            category: accountName.toLowerCase().includes('card') ? 'Credit Card' : 'Checking Account',
+            type: isCardHint ? 'Liability' : 'Investment',
+            category: isCardHint ? 'Card' : 'Savings',
             date: new Date().toISOString()
           };
-          newAccountsToProvision.push(newAcc);
-          currentLocalWealth.push(newAcc);
-          activeAccountId = newAccId;
-          accCreatedCount++;
+          newAccountsToProvision.push(activeAccount);
+          currentLocalWealth.push(activeAccount);
         }
       } else {
-        activeAccountId = defaultAccount?.id || '';
+        activeAccount = defaultAccount;
       }
 
+      const activeAccountId = activeAccount?.id || '';
       const roundedAmount = Math.round(Math.abs(item.amount || 0));
       const itemDate = (item.date || new Date().toISOString().split('T')[0]).split('T')[0];
       const itemMerchant = (item.merchant || item.source || 'General').trim();
       const itemMerchantLower = itemMerchant.toLowerCase();
       
+      const fingerprint = `${item.entryType}-${itemDate}-${roundedAmount}-${itemMerchantLower}`;
+      if (batchFingerprints.has(fingerprint)) return;
+
       const isDuplicate = item.entryType === 'Income' 
         ? incomes.some(i => Math.round(i.amount) === roundedAmount && i.date === itemDate && (i.note || '').toLowerCase() === itemMerchantLower)
         : expenses.some(e => Math.round(e.amount) === roundedAmount && e.date === itemDate && (e.merchant || '').toLowerCase() === itemMerchantLower);
       
       if (isDuplicate) { dupCount++; return; }
+      batchFingerprints.add(fingerprint);
 
       if (item.entryType === 'Expense' || item.entryType === 'Transfer') {
         const id = Math.random().toString(36).substring(2, 11);
@@ -398,7 +426,10 @@ const App: React.FC = () => {
           sourceAccountId: activeAccountId
         });
         
-        if (activeAccountId) accountBalanceUpdates[activeAccountId] = (accountBalanceUpdates[activeAccountId] || 0) - roundedAmount;
+        if (activeAccount) {
+          const multiplier = activeAccount.type === 'Liability' ? 1 : -1;
+          accountBalanceUpdates[activeAccountId] = (accountBalanceUpdates[activeAccountId] || 0) + (roundedAmount * multiplier);
+        }
         expCount++;
       } else if (item.entryType === 'Income') {
         const id = Math.random().toString(36).substring(2, 11);
@@ -411,7 +442,10 @@ const App: React.FC = () => {
           targetAccountId: activeAccountId 
         });
         
-        if (activeAccountId) accountBalanceUpdates[activeAccountId] = (accountBalanceUpdates[activeAccountId] || 0) + roundedAmount;
+        if (activeAccount) {
+          const multiplier = activeAccount.type === 'Liability' ? -1 : 1;
+          accountBalanceUpdates[activeAccountId] = (accountBalanceUpdates[activeAccountId] || 0) + (roundedAmount * multiplier);
+        }
         incCount++;
       }
     });
@@ -427,8 +461,8 @@ const App: React.FC = () => {
       }));
     }
 
-    const summary = `Ledger Processing: +${expCount} Exp, +${incCount} Inc, +${accCreatedCount} New Accounts discovered.`;
-    addNotification({ type: 'Activity', title: 'Ledger Updated', message: summary, severity: 'success' });
+    const summary = `Ingestion: +${expCount} Outflow, +${incCount} Inflow. ${dupCount > 0 ? `(${dupCount} duplicates blocked)` : ''}`;
+    addNotification({ type: 'Activity', title: 'Ledger Synchronized', message: summary, severity: 'success' });
   };
 
   const handleBatchLedgerImport = async () => {
@@ -464,7 +498,11 @@ const App: React.FC = () => {
   }, [incomes, viewDate, settings.monthlyIncome]);
 
   const remainingPercentage = useMemo(() => currentMonthIncome <= 0 ? 100 : Math.round(Math.max(0, 100 - (currentMonthSpent / currentMonthIncome) * 100)), [currentMonthSpent, currentMonthIncome]);
-  const totalNetWorth = useMemo(() => { const assets = wealthItems.filter(i => i.type === 'Investment').reduce((sum, i) => sum + i.value, 0); const liabilities = wealthItems.filter(i => i.type === 'Liability').reduce((sum, i) => sum + i.value, 0); return assets - liabilities; }, [wealthItems]);
+  const totalNetWorth = useMemo(() => { 
+    const assets = wealthItems.filter(i => i.type === 'Investment').reduce((sum, i) => sum + i.value, 0); 
+    const liabilities = wealthItems.filter(i => i.type === 'Liability').reduce((sum, i) => sum + i.value, 0); 
+    return assets - liabilities; 
+  }, [wealthItems]);
   const categoryPercentages = useMemo(() => {
     const m = viewDate.getMonth(); const y = viewDate.getFullYear();
     const plannedTotals = { Needs: 0, Wants: 0, Savings: 0 };
@@ -498,7 +536,9 @@ const App: React.FC = () => {
   if (!isAuthenticated) return <AuthScreen onLogin={handleLogin} />;
 
   return (
-    <div className="h-screen overflow-hidden bg-white dark:bg-slate-900 flex flex-col transition-colors duration-300">
+    <div className="h-screen overflow-hidden bg-white dark:bg-slate-900 flex flex-col transition-colors duration-300 relative">
+      <div className="mesh-bg"><div className="mesh-blob"></div></div>
+      
       <header className="flex-none bg-white/95 dark:bg-slate-950/95 px-4 py-3 border-b border-slate-100 dark:border-white/10 z-50 backdrop-blur-md">
         <div className="max-w-2xl mx-auto flex justify-between items-center w-full">
           <div className="flex flex-col items-start">
@@ -520,12 +560,12 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto no-scrollbar bg-white dark:bg-slate-900 relative">
+      <main className="flex-1 overflow-y-auto no-scrollbar relative">
         <div className="max-w-2xl mx-auto w-full px-4 min-h-full flex flex-col">
           <div className="flex-1">
             {currentView === 'Dashboard' && <Dashboard expenses={expenses} incomes={incomes} wealthItems={wealthItems} settings={settings} user={user} onCategorizeClick={() => setIsCategorizing(true)} onConfirmExpense={(id, cat) => onUpdateExpense(id, { category: cat, isConfirmed: true })} onSmartAdd={() => {}} viewDate={viewDate} onMonthChange={(d) => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + d, 1))} onGoToDate={(y, m) => setViewDate(new Date(y, m, 1))} onInsightsReceived={() => {}} />}
             {currentView === 'Budget' && <BudgetPlanner budgetItems={budgetItems} recurringItems={[]} expenses={expenses} bills={bills} settings={settings} onAddBudget={(b) => setBudgetItems(p => [...p, { ...b, id: Math.random().toString(36).substring(2, 11) }])} onUpdateBudget={(id, u) => setBudgetItems(p => p.map(b => b.id === id ? { ...b, ...u } : b))} onDeleteBudget={(id) => setBudgetItems(p => p.filter(b => b.id !== id))} onPayBill={handlePayBill} onDeleteBill={(id) => setBills(p => p.filter(b => b.id !== id))} onSmartAddBill={() => { triggerHaptic(); setRecordToEdit({ mode: 'Bill' }); setIsAddingRecord(true); }} viewDate={viewDate} externalShowAdd={false} onAddClose={() => {}} />}
-            {currentView === 'Accounts' && <Accounts wealthItems={wealthItems} expenses={expenses} incomes={incomes} settings={settings} onUpdateWealth={(id, u) => setWealthItems(p => p.map(w => w.id === id ? { ...w, ...u } : w))} onDeleteWealth={(id) => setWealthItems(p => p.filter(w => w.id !== id))} onAddWealth={(w) => setWealthItems(p => [...p, { ...w, id: Math.random().toString(36).substring(2, 11) }])} onEditAccount={(acc) => { setAccountToEdit(acc); setIsAddingAccount(true); }} onAddAccountClick={() => { setAccountToEdit(null); setIsAddingAccount(true); }} onAddIncomeClick={() => { triggerHaptic(); setRecordToEdit({ mode: 'Income' }); setIsAddingRecord(true); }} onAddTransferClick={() => { triggerHaptic(); setRecordToEdit({ mode: 'Transfer' }); setIsAddingRecord(true); }} externalShowAdd={false} onAddClose={() => {}} />}
+            {currentView === 'Accounts' && <Accounts wealthItems={wealthItems} expenses={expenses} incomes={incomes} settings={settings} onUpdateWealth={(id, u) => setWealthItems(p => p.map(w => w.id === id ? { ...w, ...u } : w))} onDeleteWealth={(id) => setWealthItems(p => p.filter(w => w.id !== id))} onAddWealth={(w) => { setWealthItems(p => [...p, { ...w, id: Math.random().toString(36).substring(2, 11) }]); setAccountToEdit(null); setIsAddingAccount(false); } } onEditAccount={(acc) => { setAccountToEdit(acc); setIsAddingAccount(true); }} onAddAccountClick={() => { setAccountToEdit(null); setIsAddingAccount(true); }} onAddIncomeClick={() => { triggerHaptic(); setRecordToEdit({ mode: 'Income' }); setIsAddingRecord(true); }} onAddTransferClick={() => { triggerHaptic(); setRecordToEdit({ mode: 'Transfer' }); setIsAddingRecord(true); }} externalShowAdd={false} onAddClose={() => {}} />}
             {currentView === 'Rules' && <RulesEngine rules={rules} highlightRuleId={highlightedRuleId} onClearHighlight={() => setHighlightedRuleId(null)} recurringItems={[]} settings={settings} onAddRule={handleAddRule} onDeleteRule={handleDeleteRule} onDeleteRecurring={() => {}} />}
             {currentView === 'Ledger' && <Ledger expenses={expenses} incomes={incomes} wealthItems={wealthItems} rules={rules} settings={settings} onDeleteExpense={(id) => setExpenses(p => p.filter(e => e.id !== id))} onDeleteIncome={(id) => setIncomes(p => p.filter(i => i.id !== id))} onConfirm={(id, cat) => onUpdateExpense(id, { category: cat, isConfirmed: true })} onUpdateExpense={onUpdateExpense} onEditRecord={(r) => { triggerHaptic(); setRecordToEdit(r); setIsAddingRecord(true); }} onOpenImport={() => setIsImportingToLedger(true)} onViewRule={handleViewRule} viewDate={viewDate} onMonthChange={(d) => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + d, 1))} onGoToDate={(y, m) => setViewDate(new Date(y, m, 1))} addNotification={addNotification} />}
             {currentView === 'Profile' && <Settings settings={settings} user={user} onLogout={handleLogout} onReset={handleFullReset} onToggleTheme={() => setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' }))} onUpdateAppTheme={(t) => setSettings(s => ({ ...s, appTheme: t }))} onUpdateCurrency={(c) => setSettings(s => ({ ...s, currency: c }))} onUpdateDataFilter={(f) => setSettings(s => ({ ...s, dataFilter: f }))} onUpdateSplit={(split) => setSettings(s => ({ ...s, split }))} onUpdateBaseIncome={(income) => setSettings(s => ({ ...s, monthlyIncome: Math.round(income) }))} onSync={handleSyncToCloud} onExport={handleExportData} onImport={handleImportData} onAddBulk={handleAddBulk} isSyncing={isSyncing} onLoadMockData={handleLoadMockData} onPurgeMockData={handlePurgeAllMockData} onPurgeAllData={handlePurgeAllData} onClearExpenses={() => setExpenses([])} wealthItems={wealthItems} />}
@@ -536,7 +576,30 @@ const App: React.FC = () => {
       <Navbar currentView={currentView} remainingPercentage={remainingPercentage} netWorth={totalNetWorth} categoryPercentages={categoryPercentages} onViewChange={handleViewAction} />
       {activeSmartAlert && <SmartAlert {...activeSmartAlert} currency={settings.currency} onClose={() => setActiveSmartAlert(null)} onAction={() => { if (activeSmartAlert.type === 'Bill') handlePayBill(activeSmartAlert.data); setActiveSmartAlert(null); }} />}
       
-      {isAddingAccount && <AccountForm settings={settings} initialData={accountToEdit} onSave={(acc) => { setWealthItems(p => [...p, { ...acc, id: Math.random().toString(36).substring(2, 11) }]); setIsAddingAccount(false); }} onUpdate={(id, u) => { setWealthItems(p => p.map(w => w.id === id ? { ...w, ...u } : w)); setIsAddingAccount(false); }} onCancel={() => setIsAddingAccount(false)} />}
+      {isAddingAccount && (
+        <AccountForm 
+          settings={settings} 
+          initialData={accountToEdit} 
+          onSave={(acc) => { 
+            setWealthItems(p => [...p, { ...acc, id: Math.random().toString(36).substring(2, 11) }]); 
+            setIsAddingAccount(false); 
+          }} 
+          onUpdate={(id, u) => { 
+            setWealthItems(p => p.map(w => w.id === id ? { ...w, ...u } : w)); 
+            setAccountToEdit(null); 
+            setIsAddingAccount(false); 
+          }} 
+          onDelete={(id) => { 
+            setWealthItems(p => p.filter(w => w.id !== id)); 
+            setAccountToEdit(null); 
+            setIsAddingAccount(false); 
+          }} 
+          onCancel={() => { 
+            setAccountToEdit(null); 
+            setIsAddingAccount(false); 
+          }} 
+        />
+      )}
       
       {isImportingToLedger && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-end justify-center backdrop-blur-sm">
@@ -546,7 +609,7 @@ const App: React.FC = () => {
                 <button onClick={() => setIsImportingToLedger(false)} className="p-2 bg-slate-100 dark:bg-slate-900 rounded-full text-slate-400"><X size={18} /></button>
              </div>
              <div className="p-6 space-y-4">
-                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Paste CSV or banking logs here..." className="w-full h-44 bg-slate-50 dark:bg-slate-500/10 p-4 rounded-2xl text-[11px] font-medium outline-none border border-slate-100 dark:border-slate-800 dark:text-white resize-none" />
+                <textarea value={importText} onChange={(e) => setImportText(e.target.value)} placeholder="Paste CSV or banking logs here..." className="w-full h-44 bg-slate-50 dark:bg-slate-500/10 p-4 rounded-2xl text-[11px] font-medium outline-none border border-slate-100 border-slate-800 dark:text-white resize-none" />
                 <button onClick={handleBatchLedgerImport} disabled={!importText || isAnalyzingImport} className="w-full bg-slate-900 dark:bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 text-[10px] uppercase tracking-widest disabled:opacity-50 transition-all active:scale-95">
                   {isAnalyzingImport ? <Loader2 size={16} className="animate-spin" /> : <><Sparkles size={16} /> Direct Ledger Ingestion</>}
                 </button>
@@ -555,7 +618,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {isAddingRecord && <AddRecord settings={settings} wealthItems={wealthItems} expenses={expenses} rules={rules} onAddRule={handleAddRule} onAdd={handleAddExpense} onAddIncome={handleAddIncome} onAddBill={handleAddBill} onTransfer={handleTransfer} onUpdateExpense={onUpdateExpense} onUpdateIncome={(id, u) => setIncomes(p => p.map(i => i.id === id ? { ...i, ...u } : i))} onDelete={() => { triggerHaptic(30); if (recordToEdit?.mode === 'Income') setIncomes(p => p.filter(i => i.id !== recordToEdit.id)); else setExpenses(p => p.filter(e => e.id !== recordToEdit.id)); setIsAddingRecord(false); }} onCancel={() => { triggerHaptic(); setIsAddingRecord(false); setRecordToEdit(null); }} onOpenBulkImport={() => { triggerHaptic(); setIsAddingRecord(false); setIsImportingToLedger(true); }} initialData={recordToEdit} />}
+      {isAddingRecord && <AddRecord settings={settings} wealthItems={wealthItems} expenses={expenses} rules={rules} onAddRule={handleAddRule} onAdd={handleAddExpense} onAddIncome={handleAddIncome} onAddBill={handleAddBill} onTransfer={handleTransfer} onUpdateExpense={onUpdateExpense} onUpdateIncome={(id, u) => setIncomes(p => p.map(i => i.id === id ? { ...i, ...u } : i))} onDelete={() => { triggerHaptic(30); if (recordToEdit?.mode === 'Income' || recordToEdit?.type) setIncomes(p => p.filter(i => i.id !== recordToEdit.id)); else setExpenses(p => p.filter(e => e.id !== recordToEdit.id)); setRecordToEdit(null); setIsAddingRecord(false); }} onCancel={() => { triggerHaptic(); setIsAddingRecord(false); setRecordToEdit(null); }} onOpenBulkImport={() => { triggerHaptic(); setIsAddingRecord(false); setIsImportingToLedger(true); }} initialData={recordToEdit} />}
       {isCategorizing && <CategorizationModal settings={settings} expenses={expenses.filter(e => !e.isConfirmed)} onConfirm={(id, cat) => onUpdateExpense(id, { category: cat, isConfirmed: true })} onClose={() => setIsCategorizing(false)} />}
       {isShowingNotifications && <NotificationPane notifications={notifications} onClose={() => setIsShowingNotifications(false)} onClear={() => setNotifications([])} />}
       {isShowingVersionLog && <VersionLog onClose={() => setIsShowingVersionLog(false)} />}

@@ -41,21 +41,21 @@ const RulesEngine: React.FC<RulesEngineProps> = ({ rules, highlightRuleId, onCle
 
   const density = settings.density || 'Simple';
   const containerPadding = density === 'Compact' ? 'pb-24 pt-1' : density === 'Simple' ? 'pb-32 pt-2' : 'pb-32 pt-6';
-  const headerPadding = density === 'Compact' ? 'px-3 py-2' : density === 'Simple' ? 'px-5 py-4' : 'px-6 py-6';
   const itemPadding = density === 'Compact' ? 'p-2' : 'p-3';
 
   return (
     <div className={`${containerPadding} space-y-4`}>
-      {/* PAGE HEADER */}
-      <div className={`relative overflow-hidden bg-gradient-to-r from-indigo-500/80 to-purple-600/80 ${headerPadding} rounded-2xl shadow-sm mb-1 group mx-1`}>
+      {/* PAGE HEADER - Unified with Ledger design */}
+      <div className={`bg-gradient-to-r from-indigo-600 to-purple-700 px-5 py-4 rounded-2xl mb-1 shadow-md mx-1 group relative overflow-hidden`}>
+        <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
         <div className="flex justify-between items-center relative z-10">
           <div>
-            <h1 className={`${density === 'Compact' ? 'text-base' : 'text-lg'} font-black text-white tracking-tighter uppercase leading-none`}>Automation Logic</h1>
-            <p className="text-[8px] font-black text-white/50 uppercase tracking-widest mt-0.5">Engine Config & Schedules</p>
+            <h1 className="text-sm font-black text-white tracking-tighter uppercase leading-none">Automation Logic</h1>
+            <p className="text-[7px] font-black text-white/50 uppercase tracking-[0.2em] mt-1">Engine Config & Schedules</p>
           </div>
           {activeTab === 'mapping' && (
-            <button onClick={() => setIsAdding(true)} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white backdrop-blur-md transition-all active:scale-95">
-               <Plus size={density === 'Compact' ? 14 : 18} strokeWidth={3} />
+            <button onClick={() => { triggerHaptic(); setIsAdding(true); }} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white backdrop-blur-md transition-all active:scale-95 border border-white/10">
+               <Plus size={14} strokeWidth={3} />
             </button>
           )}
         </div>
@@ -78,7 +78,7 @@ const RulesEngine: React.FC<RulesEngineProps> = ({ rules, highlightRuleId, onCle
           {isAdding && (
             <div className="animate-slide-up px-1">
               <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 shadow-sm space-y-4">
-                <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Merchant Keyword (e.g. Uber)" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-black outline-none border border-transparent focus:border-brand-primary" />
+                <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="Merchant Keyword (e.g. Uber)" className="w-full p-3 bg-slate-50 dark:bg-slate-900 rounded-xl text-xs font-black outline-none border border-transparent focus:border-brand-primary dark:text-white" />
                 <div className="grid grid-cols-3 gap-2">
                   {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
                     <button key={cat} onClick={() => setCategory(cat)} className={`p-2 rounded-xl text-[8px] font-black uppercase border transition-all ${category === cat ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-100 dark:border-slate-700'}`}>{cat}</button>
@@ -86,7 +86,7 @@ const RulesEngine: React.FC<RulesEngineProps> = ({ rules, highlightRuleId, onCle
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => setIsAdding(false)} className="flex-1 bg-slate-100 dark:bg-slate-900 text-slate-500 font-black py-3 rounded-xl text-[9px] uppercase tracking-widest">Cancel</button>
-                  <button onClick={handleAdd} className="flex-[2] bg-brand-primary text-white font-black py-3 rounded-xl text-[9px] uppercase tracking-widest shadow-lg shadow-indigo-100">Save Rule</button>
+                  <button onClick={handleAdd} className="flex-[2] bg-brand-primary text-white font-black py-3 rounded-xl text-[9px] uppercase tracking-widest shadow-lg">Save Rule</button>
                 </div>
               </div>
             </div>

@@ -11,11 +11,15 @@ import {
   Briefcase, Scissors, Building2, PiggyBank,
   BookOpen, Construction, FilterX,
   BrainCircuit, ChevronRight as ChevronRightIcon,
-  Fingerprint, LayoutList, BarChart3, BarChart2,
-  TrendingDown, Activity, AlignLeft, Wand2,
-  Heart, Star, Wallet, CreditCard, Coins, Receipt
+  Fingerprint, LayoutList, BarChart3,
+  TrendingDown, Activity, Wand2,
+  Check, CheckCircle2, ListChecks, Square, CheckSquare,
+  Tag, CheckCircle,
+  CreditCard, Coins, Star, Heart, Receipt,
+  // Fix: Added missing Wallet icon import
+  Wallet
 } from 'lucide-react';
-import { auditTransaction } from '../services/geminiService';
+import { auditTransaction, refineBatchTransactions } from '../services/geminiService';
 import { triggerHaptic } from '../utils/haptics';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 
@@ -101,27 +105,30 @@ const SwipeableItem: React.FC<{
   onViewRule?: (ruleId: string) => void;
   onUpdateExpense?: (id: string, updates: Partial<Expense>) => void;
   density: string;
-}> = ({ item, recordType, currencySymbol, matchedRule, onDelete, onEdit, onViewRule, onUpdateExpense, density }) => {
+  aiSuggestion?: { category: Category; subCategory: string; merchant: string };
+  isSelectionMode: boolean;
+  isSelected: boolean;
+  onToggleSelect: (id: string) => void;
+  accountAlias?: string;
+}> = ({ item, recordType, currencySymbol, matchedRule, onDelete, onEdit, onViewRule, onUpdateExpense, density, aiSuggestion, isSelectionMode, isSelected, onToggleSelect, accountAlias }) => {
   const [offsetX, setOffsetX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [auditResult, setAuditResult] = useState<any | null>(null);
   const touchStartX = useRef<number | null>(null);
   const totalMovementRef = useRef(0);
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isDeleting) return;
+    if (isDeleting || isSelectionMode) return;
     if (e.touches.length > 0) { touchStartX.current = e.touches[0].clientX; totalMovementRef.current = 0; setIsSwiping(true); }
   };
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (isDeleting || touchStartX.current === null || e.touches.length === 0) return;
+    if (isDeleting || touchStartX.current === null || e.touches.length === 0 || isSelectionMode) return;
     const diff = e.touches[0].clientX - touchStartX.current;
     totalMovementRef.current = Math.max(totalMovementRef.current, Math.abs(diff));
     if (diff < 0) setOffsetX(diff);
   };
   const handleTouchEnd = () => {
-    if (isDeleting) return;
+    if (isDeleting || isSelectionMode) return;
     if (offsetX < -75) { triggerHaptic(20); setOffsetX(-1000); setIsDeleting(true); setTimeout(() => onDelete(item.id), 300); }
     else setOffsetX(0);
     setIsSwiping(false);
@@ -135,45 +142,17 @@ const SwipeableItem: React.FC<{
   const isRuleMatched = !!item.ruleId;
   const isAIUpgraded = item.isAIUpgraded;
 
-  const handleAudit = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    triggerHaptic();
-    if (recordType !== 'expense' || auditLoading) return;
-    
-    setAuditLoading(true);
-    let suggestedCategory: Category | null = null;
-    const subCat = (item.subCategory || '').toLowerCase().trim();
-
-    if (subCat) {
-      for (const [cat, subList] of Object.entries(SUB_CATEGORIES)) {
-        if (subList.some(s => s.toLowerCase().includes(subCat) || subCat.includes(s.toLowerCase()))) {
-          suggestedCategory = cat as Category;
-          break;
-        }
-      }
-    }
-
-    if (suggestedCategory) {
-      await new Promise(r => setTimeout(r, 400));
-      setAuditResult({
-        isCorrect: item.category === suggestedCategory,
-        suggestedCategory,
-        insight: `Pattern match: "${item.subCategory}" mapped to ${suggestedCategory} hierarchy.`,
-        isAnomaly: false
-      });
-    } else {
-      const result = await auditTransaction(item, currencySymbol);
-      setAuditResult(result);
-    }
-    setAuditLoading(false);
-  };
-
   const applyAuditCategory = (e: React.MouseEvent) => {
     e.stopPropagation();
     triggerHaptic();
-    if (auditResult?.suggestedCategory && onUpdateExpense) {
-      onUpdateExpense(item.id, { category: auditResult.suggestedCategory as Category, isAIUpgraded: true, isConfirmed: true });
-      setAuditResult(null);
+    if (aiSuggestion && onUpdateExpense) {
+      onUpdateExpense(item.id, { 
+        category: aiSuggestion.category, 
+        subCategory: aiSuggestion.subCategory, 
+        merchant: aiSuggestion.merchant,
+        isAIUpgraded: true, 
+        isConfirmed: true 
+      });
     }
   };
 
@@ -182,108 +161,166 @@ const SwipeableItem: React.FC<{
     if (item.ruleId && onViewRule) onViewRule(item.ruleId);
   };
 
-  // Primary Title: Sub-category for Expenses, Type for Income
+  const handleItemInteraction = () => {
+    if (isSelectionMode) {
+      triggerHaptic(10);
+      onToggleSelect(item.id);
+    } else {
+      if (totalMovementRef.current < 10) {
+        triggerHaptic();
+        onEdit({ ...item, recordType });
+      }
+    }
+  };
+
   const primaryTitle = recordType === 'income' ? item.type : (recordType === 'transfer' || recordType === 'bill_payment') ? item.subCategory : (item.subCategory || item.category);
+
+  // Suggestion check
+  const isCorrect = aiSuggestion && aiSuggestion.category === item.category;
 
   return (
     <div className={`relative overflow-hidden transition-all duration-300 ${isDeleting ? 'max-h-0 opacity-0' : 'max-h-[600px] opacity-100'} animate-slide-up`}>
-      <div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 flex items-center justify-end px-6">
-        <Trash2 className="text-slate-400 dark:text-slate-500" size={18} />
-      </div>
+      {!isSelectionMode && (
+        <div className="absolute inset-0 bg-slate-100 dark:bg-slate-800 flex items-center justify-end px-6">
+          <Trash2 className="text-slate-400 dark:text-slate-500" size={18} />
+        </div>
+      )}
       
       <div 
-        onClick={() => totalMovementRef.current < 10 && (triggerHaptic(), onEdit({ ...item, recordType }))}
-        className={`relative z-10 px-4 py-3 border-b border-slate-50 dark:border-slate-800/40 bg-white dark:bg-slate-950 transition-all active:bg-slate-50 dark:active:bg-slate-900 cursor-pointer group`} 
+        onClick={handleItemInteraction}
+        className={`relative z-10 px-4 py-3 border-b border-slate-50 dark:border-slate-800/40 bg-white dark:bg-slate-950 transition-all active:bg-slate-50 dark:active:bg-slate-900 cursor-pointer group flex items-center gap-3`} 
         style={{ transform: `translateX(${offsetX}px)`, transition: isSwiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)' }} 
         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-start gap-3 overflow-hidden">
-            <div className="w-10 h-10 flex items-center justify-center shrink-0 rounded-xl mt-0.5" style={{ backgroundColor: `${themeColor}15`, color: themeColor }}>
-              {getCategoryIcon(parentCategory, item.subCategory, recordType === 'income' ? item.type : undefined)}
-            </div>
-            <div className="min-w-0 flex flex-col">
-              <div className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
-                <h4 className="font-extrabold text-slate-800 dark:text-slate-200 text-[13px] truncate leading-tight">
-                  {primaryTitle}
-                </h4>
-                {isRuleMatched && <Zap size={8} className="text-emerald-500 fill-emerald-500 shrink-0" />}
-                {isAIUpgraded && <Sparkles size={8} className="text-indigo-400 shrink-0" />}
-              </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[7px] font-black uppercase tracking-wider px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
-                  {item.merchant || 'General'}
-                </span>
-                <span className="text-[7px] text-slate-300 dark:text-slate-600 font-black">•</span>
-                <div className="flex items-center gap-1">
-                   {(recordType === 'expense' || recordType === 'bill_payment' || recordType === 'transfer') && (
-                     <div className="flex items-center gap-1 mr-1">
-                        {getParentCategoryIndicator(item.category, item.subCategory)}
-                        <span className="text-[6px] font-black uppercase text-slate-400 tracking-tighter">{item.subCategory === 'Bill Payment' ? 'Settlement' : item.category}</span>
-                     </div>
-                   )}
-                   <p className="text-[7px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">
-                     {new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                   </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="text-right flex items-center gap-3 shrink-0 ml-2">
-            <div>
-              <p className={`font-black text-[15px] tracking-tight ${recordType === 'income' ? 'text-emerald-500' : (recordType === 'transfer' || recordType === 'bill_payment') ? 'text-indigo-500' : 'text-slate-900 dark:text-white'}`}>
-                {recordType === 'income' ? '+' : (recordType === 'transfer' || recordType === 'bill_payment') ? '⇅' : '-'}{currencySymbol}{Math.round(amount).toLocaleString()}
-              </p>
-              {recordType === 'expense' && !auditResult && !isAIUpgraded && !isRuleMatched && (
-                <button onClick={handleAudit} className="text-indigo-400 opacity-50 hover:opacity-100 transition-transform active:scale-90 mt-1">
-                  {auditLoading ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
-                </button>
-              )}
-            </div>
-            <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 transition-colors"><Edit2 size={12} /></div>
-          </div>
-        </div>
-
-        <div className="mt-3 space-y-2 border-t border-slate-50 dark:border-slate-800/50 pt-2 animate-kick">
-           <div className="flex flex-col gap-2 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
-             <div className="flex justify-between items-center">
-                <div className="flex items-center gap-1.5">
-                   <Fingerprint size={10} className="text-slate-400" />
-                   <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Source Context</span>
-                </div>
-                {isRuleMatched && (
-                   <button onClick={handleViewRuleClick} className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800 hover:scale-105 active:scale-95 transition-all">
-                      <span className="text-[7px] font-black uppercase">View Rule</span>
-                      <ChevronRightIcon size={8} />
-                   </button>
-                )}
-             </div>
-             <p className="text-[9px] font-bold text-slate-600 dark:text-slate-400 italic leading-relaxed line-clamp-2">
-                "{item.note || item.merchant || 'Manual entry - no source log recorded.'}"
-             </p>
-           </div>
-        </div>
-        
-        {auditResult && (
-          <div className="mt-2 p-1.5 bg-indigo-50 dark:bg-indigo-950/20 rounded-lg border border-indigo-100 dark:border-indigo-900/30 animate-kick">
-            <p className="text-[7px] font-bold text-slate-700 dark:text-slate-300 leading-tight">{auditResult.insight}</p>
-            {!auditResult.isCorrect && (
-              <button onClick={applyAuditCategory} className="mt-1 px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-[6px] font-black text-indigo-600 uppercase tracking-widest">Apply AI Suggestion</button>
-            )}
+        {isSelectionMode && (
+          <div className={`shrink-0 transition-all ${isSelected ? 'text-brand-primary' : 'text-slate-300 dark:text-slate-600'}`}>
+            {isSelected ? <CheckSquare size={20} fill="currentColor" className="text-white dark:text-slate-950" /> : <Square size={20} />}
           </div>
         )}
+
+        <div className="flex-1">
+          <div className="flex items-center justify-between">
+            <div className="flex items-start gap-3 overflow-hidden">
+              <div className="w-10 h-10 flex items-center justify-center shrink-0 rounded-xl mt-0.5" style={{ backgroundColor: `${themeColor}15`, color: themeColor }}>
+                {getCategoryIcon(parentCategory, item.subCategory, recordType === 'income' ? item.type : undefined)}
+              </div>
+              <div className="min-w-0 flex flex-col">
+                <div className="flex items-center gap-1.5 whitespace-nowrap overflow-hidden">
+                  <h4 className="font-extrabold text-slate-800 dark:text-slate-200 text-[13px] truncate leading-tight">
+                    {primaryTitle}
+                  </h4>
+                  {isRuleMatched && <Zap size={8} className="text-emerald-500 fill-emerald-500 shrink-0" />}
+                  {isAIUpgraded && <Sparkles size={8} className="text-indigo-400 shrink-0" />}
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[7px] font-black uppercase tracking-wider px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 truncate max-w-[120px]">
+                    {item.merchant || 'General'}
+                  </span>
+                  <span className="text-[7px] text-slate-300 dark:text-slate-600 font-black">•</span>
+                  <div className="flex items-center gap-1">
+                    {(recordType === 'expense' || recordType === 'bill_payment' || recordType === 'transfer') && (
+                      <div className="flex items-center gap-1 mr-1">
+                          {getParentCategoryIndicator(item.category, item.subCategory)}
+                          <span className="text-[6px] font-black uppercase text-slate-400 tracking-tighter">{item.subCategory === 'Bill Payment' ? 'Settlement' : item.category}</span>
+                      </div>
+                    )}
+                    <p className="text-[7px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest leading-none">
+                      {new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="text-right flex items-center gap-3 shrink-0 ml-2">
+              <div>
+                <p className={`font-black text-[15px] tracking-tight ${recordType === 'income' ? 'text-emerald-500' : (recordType === 'transfer' || recordType === 'bill_payment') ? 'text-indigo-500' : 'text-slate-900 dark:text-white'}`}>
+                  {recordType === 'income' ? '+' : (recordType === 'transfer' || recordType === 'bill_payment') ? '⇅' : '-'}{currencySymbol}{Math.round(amount).toLocaleString()}
+                </p>
+              </div>
+              {!isSelectionMode && (
+                <div className="p-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 text-slate-300 dark:text-slate-600 group-hover:text-indigo-500 transition-colors"><Edit2 size={12} /></div>
+              )}
+            </div>
+          </div>
+
+          {!isSelectionMode && (
+            <>
+              <div className="mt-3 space-y-2 border-t border-slate-50 dark:border-slate-800/50 pt-2 animate-kick">
+                <div className="flex flex-col gap-2 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                  <div className="flex justify-between items-center">
+                      <div className="flex items-center gap-1.5">
+                        <Fingerprint size={10} className="text-slate-400" />
+                        <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Source Context</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {accountAlias && (
+                          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800">
+                            <Wallet size={8} />
+                            <span className="text-[7px] font-black uppercase">{accountAlias}</span>
+                          </div>
+                        )}
+                        {isRuleMatched && (
+                          <button onClick={handleViewRuleClick} className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800 hover:scale-105 active:scale-95 transition-all">
+                              <span className="text-[7px] font-black uppercase">View Rule</span>
+                              <ChevronRightIcon size={8} />
+                          </button>
+                        )}
+                      </div>
+                  </div>
+                  <p className="text-[9px] font-bold text-slate-600 dark:text-slate-400 italic leading-relaxed line-clamp-2">
+                      "{item.note || item.merchant || 'Manual entry - no source log recorded.'}"
+                  </p>
+                </div>
+              </div>
+              
+              {aiSuggestion && (
+                <div className="mt-2 p-2 bg-indigo-50 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/30 animate-kick flex items-center justify-between gap-3">
+                  <div className="flex-1">
+                    <p className="text-[8px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest mb-0.5">AI Perception</p>
+                    <p className="text-[10px] font-bold text-slate-700 dark:text-slate-300 leading-tight">
+                      Recommended: {aiSuggestion.category} &rsaquo; {aiSuggestion.subCategory}
+                    </p>
+                  </div>
+                  {!isCorrect && (
+                    <button 
+                      onClick={applyAuditCategory} 
+                      className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-[8px] font-black uppercase tracking-widest shadow-md hover:scale-105 active:scale-95 transition-all"
+                    >
+                      <Check size={10} strokeWidth={4} />
+                      Switch
+                    </button>
+                  )}
+                  {isCorrect && (
+                    <div className="shrink-0 p-1.5 bg-emerald-500/10 text-emerald-500 rounded-lg flex items-center gap-1 animate-kick">
+                        <CheckCircle2 size={12} strokeWidth={3} />
+                        <span className="text-[8px] font-black uppercase">Verified</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
 const Ledger: React.FC<LedgerProps> = ({ 
-  expenses, incomes, wealthItems, settings, rules = [], onDeleteExpense, onDeleteIncome, onEditRecord, onOpenImport, onViewRule, viewDate, onMonthChange, onUpdateExpense
+  expenses, incomes, wealthItems, settings, rules = [], onDeleteExpense, onDeleteIncome, onEditRecord, onOpenImport, onViewRule, viewDate, onMonthChange, onUpdateExpense, addNotification
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'expense' | 'income' | 'transfer' | 'bill_payment'>('all');
   const [viewMode, setViewMode] = useState<'list' | 'compare'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isRefining, setIsRefining] = useState(false);
+  const [batchSuggestions, setBatchSuggestions] = useState<Record<string, any>>({});
+  const [isShowingAISuggestionsOnly, setIsShowingAISuggestionsOnly] = useState(false);
+  
+  // Selection States
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkCategoryMenu, setShowBulkCategoryMenu] = useState(false);
   
   const currencySymbol = getCurrencySymbol(settings.currency);
   const monthLabelCompact = `${viewDate.toLocaleDateString(undefined, { month: 'short' }).toUpperCase()}'${viewDate.getFullYear().toString().slice(-2)}`;
@@ -311,11 +348,15 @@ const Ledger: React.FC<LedgerProps> = ({
     const billPayments = expenses.filter(e => e.subCategory === 'Bill Payment' && new Date(e.date).getMonth() === m && new Date(e.date).getFullYear() === y).map(e => ({ ...e, recordType: 'bill_payment' as const }));
     
     let list: any[] = [];
-    if (filterType === 'all') list = [...exps, ...incs, ...transfers, ...billPayments];
-    else if (filterType === 'expense') list = exps;
-    else if (filterType === 'income') list = incs;
-    else if (filterType === 'transfer') list = transfers;
-    else if (filterType === 'bill_payment') list = billPayments;
+    if (isShowingAISuggestionsOnly) {
+      list = exps.filter(e => !!batchSuggestions[e.id]);
+    } else {
+      if (filterType === 'all') list = [...exps, ...incs, ...transfers, ...billPayments];
+      else if (filterType === 'expense') list = exps;
+      else if (filterType === 'income') list = incs;
+      else if (filterType === 'transfer') list = transfers;
+      else if (filterType === 'bill_payment') list = billPayments;
+    }
     
     list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     if (!q) return list;
@@ -325,11 +366,64 @@ const Ledger: React.FC<LedgerProps> = ({
       const sub = (rec.subCategory || '').toLowerCase();
       return name.includes(q) || cat.includes(q) || sub.includes(q) || rec.amount?.toString().includes(q);
     });
-  }, [filterType, expenses, incomes, viewDate, searchQuery]);
+  }, [filterType, expenses, incomes, viewDate, searchQuery, isShowingAISuggestionsOnly, batchSuggestions]);
+
+  const handleBatchRefine = async () => {
+    const candidates = filteredRecords.filter(r => r.recordType === 'expense' && (r.category === 'Uncategorized' || !r.isConfirmed));
+    if (candidates.length === 0) {
+      addNotification({ type: 'AI', title: 'Clean Ledger', message: 'Current month categorization looks healthy.', severity: 'info' });
+      return;
+    }
+
+    triggerHaptic();
+    setIsRefining(true);
+    try {
+      const payload = candidates.map(c => ({ id: c.id, amount: c.amount, merchant: c.merchant || 'General', note: c.note || '' }));
+      const suggestions = await refineBatchTransactions(payload);
+      
+      const newMap = { ...batchSuggestions };
+      suggestions.forEach(s => {
+        newMap[s.id] = s;
+      });
+      setBatchSuggestions(newMap);
+      setIsShowingAISuggestionsOnly(true);
+      
+      addNotification({ type: 'AI', title: 'Neural Analysis Complete', message: `Refined mapping for ${suggestions.length} transactions. Ledger focused on audit results.`, severity: 'success' });
+    } catch (e) {
+      addNotification({ type: 'Activity', title: 'AI Refinement Failed', message: 'Neural channel handshake interrupted.', severity: 'error' });
+    } finally {
+      setIsRefining(false);
+    }
+  };
+
+  const handleConfirmAllAI = () => {
+    triggerHaptic(40);
+    const suggestedIds = Object.keys(batchSuggestions);
+    let count = 0;
+    suggestedIds.forEach(id => {
+      const suggestion = batchSuggestions[id];
+      if (suggestion) {
+        onUpdateExpense(id, { 
+          category: suggestion.category, 
+          subCategory: suggestion.subCategory, 
+          merchant: suggestion.merchant,
+          isAIUpgraded: true, 
+          isConfirmed: true 
+        });
+        count++;
+      }
+    });
+    setBatchSuggestions({});
+    setIsShowingAISuggestionsOnly(false);
+    addNotification({ type: 'Activity', title: 'Bulk Confirmation', message: `Applied AI mappings to ${count} transactions.`, severity: 'success' });
+  };
 
   const handleFilterToggle = (type: typeof filterType) => {
     triggerHaptic();
     setFilterType(prev => prev === type ? 'all' : type);
+    setIsShowingAISuggestionsOnly(false);
+    // Reset selection when filter changes
+    setSelectedIds(new Set());
   };
 
   const handleModeToggle = (mode: typeof viewMode) => {
@@ -337,30 +431,166 @@ const Ledger: React.FC<LedgerProps> = ({
     setViewMode(mode);
   };
 
+  // Selection Methods
+  const toggleSelectionMode = () => {
+    triggerHaptic();
+    setIsSelectionMode(!isSelectionMode);
+    setSelectedIds(new Set());
+    setShowBulkCategoryMenu(false);
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    triggerHaptic();
+    if (selectedIds.size === filteredRecords.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredRecords.map(r => r.id)));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    triggerHaptic(40);
+    if (window.confirm(`Permanently delete ${selectedIds.size} transactions?`)) {
+      selectedIds.forEach(id => {
+        // Try deleting from both pools
+        onDeleteExpense(id);
+        onDeleteIncome(id);
+      });
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+      addNotification({ type: 'Activity', title: 'Bulk Purge', message: `${selectedIds.size} records removed from registry.`, severity: 'success' });
+    }
+  };
+
+  const handleBulkCategorize = (cat: Category) => {
+    triggerHaptic(20);
+    let count = 0;
+    selectedIds.forEach(id => {
+      const exp = expenses.find(e => e.id === id);
+      if (exp) {
+        onUpdateExpense(id, { category: cat, isConfirmed: true });
+        count++;
+      }
+    });
+    setSelectedIds(new Set());
+    setIsSelectionMode(false);
+    setShowBulkCategoryMenu(false);
+    addNotification({ type: 'Activity', title: 'Bulk Categorization', message: `Mapped ${count} entries to ${cat}.`, severity: 'success' });
+  };
+
   return (
     <div className="pb-32 pt-1 animate-slide-up">
-      <div className="bg-gradient-to-r from-brand-primary to-brand-secondary px-5 py-4 rounded-2xl mb-1 shadow-md">
+      <div className={`bg-gradient-to-r from-brand-primary to-brand-secondary px-5 py-4 rounded-2xl mb-1 shadow-md transition-all ${isSelectionMode ? 'ring-4 ring-brand-primary/20 ring-inset' : ''}`}>
         <div className="flex justify-between items-center w-full">
           <div>
-            <h1 className="text-sm font-black text-white tracking-tighter uppercase leading-none">Ledger</h1>
-            <p className="text-[7px] font-black text-white/50 uppercase tracking-[0.2em] mt-1">Registry Log</p>
+            <h1 className="text-sm font-black text-white tracking-tighter uppercase leading-none">
+              {isSelectionMode ? `${selectedIds.size} Selected` : 'Ledger'}
+            </h1>
+            <p className="text-[7px] font-black text-white/50 uppercase tracking-[0.2em] mt-1">
+              {isSelectionMode ? 'Bulk Operations' : 'Registry Log'}
+            </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 relative">
              <button 
-               onClick={() => { triggerHaptic(); setIsSearchOpen(!isSearchOpen); }} 
-               className={`p-2 rounded-xl transition-all ${isSearchOpen ? 'bg-white text-slate-900 shadow-sm' : 'bg-white/10 text-white active:scale-90'}`}
+               onClick={toggleSelectionMode} 
+               className={`p-2 rounded-xl transition-all ${isSelectionMode ? 'bg-white text-brand-primary shadow-lg scale-110' : 'bg-white/10 text-white active:scale-90'}`}
+               title="Toggle Selection Mode"
              >
-               <Search size={14} />
+               <ListChecks size={14} strokeWidth={isSelectionMode ? 3 : 2} />
              </button>
-             <button 
-               onClick={() => { triggerHaptic(); onOpenImport(); }} 
-               className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white transition-all active:scale-90"
-             >
-               <Sparkles size={14} />
-             </button>
+             {!isSelectionMode && (
+               <div className="relative">
+                 <button 
+                  onClick={() => { triggerHaptic(); setIsSearchOpen(!isSearchOpen); }} 
+                  className={`p-2 rounded-xl transition-all ${isSearchOpen ? 'bg-white text-slate-900 shadow-sm' : 'bg-white/10 text-white active:scale-90'}`}
+                 >
+                  <Search size={14} />
+                 </button>
+                 
+                 {/* Tiny Search Popup */}
+                 {isSearchOpen && (
+                   <div className="absolute top-12 right-0 z-[60] w-64 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-800 p-2 animate-kick">
+                      <div className="relative">
+                        <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input 
+                          autoFocus 
+                          type="text" 
+                          value={searchQuery} 
+                          onChange={(e) => setSearchQuery(e.target.value)} 
+                          placeholder="Search..." 
+                          className="w-full bg-slate-50 dark:bg-slate-800 pl-9 pr-8 py-2 rounded-xl text-[10px] font-bold outline-none border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-white" 
+                        />
+                        <button 
+                          onClick={() => { setIsSearchOpen(false); setSearchQuery(''); }}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-300"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                   </div>
+                 )}
+               </div>
+             )}
+             {!isSelectionMode && (
+               <button 
+                onClick={handleBatchRefine} 
+                disabled={isRefining}
+                className={`p-2 rounded-xl transition-all active:scale-90 disabled:opacity-50 ${isShowingAISuggestionsOnly ? 'bg-white text-indigo-600 shadow-lg' : 'bg-white/10 text-white'}`}
+               >
+                {isRefining ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+               </button>
+             )}
+             {isSelectionMode && (
+               <button 
+                onClick={handleSelectAll} 
+                className="p-2 bg-white/10 rounded-xl text-white active:scale-90 transition-all font-black text-[8px] uppercase px-3"
+               >
+                 {selectedIds.size === filteredRecords.length ? 'Deselect All' : 'Select All'}
+               </button>
+             )}
           </div>
         </div>
       </div>
+
+      {/* Confirm All AI Suggestions Banner */}
+      {isShowingAISuggestionsOnly && Object.keys(batchSuggestions).length > 0 && !isSelectionMode && (
+        <div className="bg-indigo-600 rounded-2xl mb-2 px-4 py-3 shadow-lg shadow-indigo-200 dark:shadow-none flex items-center justify-between animate-kick mx-1">
+           <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-white/10 rounded-xl flex items-center justify-center text-white shrink-0">
+                 <Sparkles size={16} />
+              </div>
+              <div>
+                 <p className="text-[8px] font-black text-white/70 uppercase tracking-widest leading-none">Neural Protocol</p>
+                 <p className="text-[11px] font-black text-white mt-1">{Object.keys(batchSuggestions).length} items audited</p>
+              </div>
+           </div>
+           <div className="flex gap-2">
+             <button 
+               onClick={() => { triggerHaptic(); setIsShowingAISuggestionsOnly(false); setBatchSuggestions({}); }}
+               className="px-3 py-1.5 bg-white/10 text-white rounded-lg text-[9px] font-black uppercase tracking-widest active:scale-95 transition-all"
+             >
+               Exit
+             </button>
+             <button 
+               onClick={handleConfirmAllAI}
+               className="px-3 py-1.5 bg-white text-indigo-600 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
+             >
+               <CheckCircle size={10} strokeWidth={4} />
+               Confirm All
+             </button>
+           </div>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 mb-2 shadow-sm">
         <div className="flex flex-col gap-4">
@@ -374,7 +604,7 @@ const Ledger: React.FC<LedgerProps> = ({
               <button onClick={() => (triggerHaptic(), onMonthChange(1))} className="p-1.5 text-slate-400 hover:text-brand-primary transition-colors active:scale-90"><ChevronRight size={14} strokeWidth={3} /></button>
               
               {/* Inline Filters */}
-              {viewMode === 'list' && (
+              {viewMode === 'list' && !isSelectionMode && (
                 <div className="flex items-center gap-0.5 ml-2 pl-2 border-l border-slate-200 dark:border-slate-700">
                   <button onClick={() => handleFilterToggle('expense')} className={`p-1.5 rounded-lg transition-all active:scale-90 ${filterType === 'expense' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-400'}`}>
                     <TrendingDown size={14} strokeWidth={3} />
@@ -388,8 +618,8 @@ const Ledger: React.FC<LedgerProps> = ({
                   <button onClick={() => handleFilterToggle('bill_payment')} className={`p-1.5 rounded-lg transition-all active:scale-90 ${filterType === 'bill_payment' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400'}`}>
                     <CreditCard size={14} strokeWidth={3} />
                   </button>
-                  {filterType !== 'all' && (
-                    <button onClick={() => (triggerHaptic(), setFilterType('all'))} className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors">
+                  {(filterType !== 'all' || isShowingAISuggestionsOnly) && (
+                    <button onClick={() => (triggerHaptic(), setFilterType('all'), setIsShowingAISuggestionsOnly(false))} className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors">
                       <FilterX size={14} />
                     </button>
                   )}
@@ -414,30 +644,6 @@ const Ledger: React.FC<LedgerProps> = ({
               </button>
             </div>
           </div>
-
-          {isSearchOpen && viewMode === 'list' && (
-            <div className="animate-kick">
-              <div className="relative">
-                <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input 
-                  autoFocus 
-                  type="text" 
-                  value={searchQuery} 
-                  onChange={(e) => setSearchQuery(e.target.value)} 
-                  placeholder="Search merchant, category or amount..." 
-                  className="w-full bg-slate-50 dark:bg-slate-800 pl-9 pr-4 py-2.5 rounded-xl text-[10px] font-bold outline-none border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:border-brand-primary transition-colors" 
-                />
-                {searchQuery && (
-                  <button 
-                    onClick={() => { triggerHaptic(); setSearchQuery(''); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-slate-500"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -449,7 +655,7 @@ const Ledger: React.FC<LedgerProps> = ({
                  <FilterX size={32} strokeWidth={1.5} />
               </div>
               <p className="text-slate-300 dark:text-slate-700 font-black text-[10px] uppercase tracking-[0.4em]">
-                {searchQuery ? 'No search results found' : `No ${filterType === 'all' ? 'entries' : filterType} in registry`}
+                {searchQuery || isShowingAISuggestionsOnly ? 'No results in this view' : `No ${filterType === 'all' ? 'entries' : filterType} in registry`}
               </p>
             </div>
           ) : (
@@ -466,6 +672,11 @@ const Ledger: React.FC<LedgerProps> = ({
                   onViewRule={onViewRule}
                   onUpdateExpense={onUpdateExpense}
                   density={settings.density || 'Compact'} 
+                  aiSuggestion={batchSuggestions[rec.id]}
+                  isSelectionMode={isSelectionMode}
+                  isSelected={selectedIds.has(rec.id)}
+                  onToggleSelect={handleToggleSelect}
+                  accountAlias={wealthItems.find(w => w.id === (rec.sourceAccountId || rec.targetAccountId))?.alias}
                 />
               ))}
             </div>
@@ -531,6 +742,52 @@ const Ledger: React.FC<LedgerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Bulk Action Bar */}
+      {isSelectionMode && selectedIds.size > 0 && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-lg z-50 animate-slide-up">
+           <div className="bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xl border border-white/10">
+                 <span className="text-white font-black text-[12px]">{selectedIds.size}</span>
+                 <span className="text-white/50 font-black text-[8px] uppercase tracking-widest">Active</span>
+              </div>
+              
+              <div className="flex items-center gap-2 flex-1 justify-end">
+                 <div className="relative">
+                   <button 
+                    onClick={() => { triggerHaptic(); setShowBulkCategoryMenu(!showBulkCategoryMenu); }}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-600 text-white rounded-xl shadow-lg active:scale-95 transition-all"
+                   >
+                     <Tag size={14} />
+                     <span className="text-[10px] font-black uppercase tracking-widest">Categorize</span>
+                   </button>
+
+                   {showBulkCategoryMenu && (
+                     <div className="absolute bottom-full mb-3 right-0 bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-2xl p-1 animate-kick flex flex-col gap-1 w-40">
+                        {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
+                          <button 
+                            key={cat}
+                            onClick={() => handleBulkCategorize(cat)}
+                            className="w-full flex items-center gap-3 px-3 py-2 hover:bg-white/10 rounded-lg text-white transition-colors"
+                          >
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[cat] }} />
+                            <span className="text-[10px] font-black uppercase tracking-widest">{cat}</span>
+                          </button>
+                        ))}
+                     </div>
+                   )}
+                 </div>
+
+                 <button 
+                  onClick={handleBulkDelete}
+                  className="p-2.5 bg-rose-500 hover:bg-rose-500 text-white rounded-xl shadow-lg active:scale-95 transition-all"
+                 >
+                   <Trash2 size={16} />
+                 </button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };

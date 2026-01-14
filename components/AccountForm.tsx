@@ -1,41 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { WealthItem, WealthType, WealthCategory, UserSettings } from '../types';
 import { getCurrencySymbol } from '../constants';
-import { Check, X, Landmark, CreditCard, Briefcase, Wallet } from 'lucide-react';
+import { Check, X, Landmark, CreditCard, Briefcase, Wallet, Trash2, Tag, Info } from 'lucide-react';
+import { triggerHaptic } from '../utils/haptics';
 
 interface AccountFormProps {
   settings: UserSettings;
   onSave: (item: Omit<WealthItem, 'id'>) => void;
   onUpdate?: (id: string, updates: Partial<WealthItem>) => void;
+  onDelete?: (id: string) => void;
   onCancel: () => void;
   initialData?: WealthItem | null;
 }
 
-const WEALTH_CATEGORIES: WealthCategory[] = [
-  'Checking Account', 'Savings Account', 'Cash',
-  'Stock', 'Mutual Fund', 'Crypto', 'Gold', 'Real Estate', 
-  'Loan', 'Credit Card', 'Other'
-];
+const DEBIT_CATEGORIES: WealthCategory[] = ['Savings', 'Overdraft', 'Cash', 'Investment'];
+const CREDIT_CATEGORIES: WealthCategory[] = ['Card', 'Loan', 'Other'];
 
-const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, onCancel, initialData }) => {
+const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, onDelete, onCancel, initialData }) => {
   const isEditing = !!(initialData && initialData.id);
-  const [type, setType] = useState<WealthType>('Investment');
-  const [category, setCategory] = useState<WealthCategory>('Checking Account');
-  const [name, setName] = useState('');
-  const [value, setValue] = useState('');
-  const [limit, setLimit] = useState('');
+  const [type, setType] = useState<WealthType>(initialData?.type || 'Investment');
+  const [category, setCategory] = useState<WealthCategory>(initialData?.category || 'Savings');
+  const [name, setName] = useState(initialData?.name || '');
+  const [alias, setAlias] = useState(initialData?.alias || '');
+  const [value, setValue] = useState(initialData ? Math.round(initialData.value).toString() : '');
+  const [limit, setLimit] = useState(initialData?.limit ? Math.round(initialData.limit).toString() : '');
 
   const currencySymbol = getCurrencySymbol(settings.currency);
-
-  useEffect(() => {
-    if (initialData) {
-      setType(initialData.type);
-      setCategory(initialData.category);
-      setName(initialData.name);
-      setValue(Math.round(initialData.value).toString());
-      if (initialData.limit) setLimit(Math.round(initialData.limit).toString());
-    }
-  }, [initialData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,19 +34,28 @@ const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, o
     const payload: Omit<WealthItem, 'id'> = {
       type,
       category,
-      name,
+      name: name.trim(),
+      alias: (alias || name).trim(),
       value: Math.round(parseFloat(value)),
       date: new Date().toISOString()
     };
 
-    if (category === 'Credit Card' && limit) {
+    if (category === 'Card' && limit) {
       payload.limit = Math.round(parseFloat(limit));
     }
 
-    if (isEditing && onUpdate) {
-      onUpdate(initialData!.id, payload);
+    if (isEditing && onUpdate && initialData?.id) {
+      onUpdate(initialData.id, payload);
     } else {
       onSave(payload);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!initialData || !initialData.id || !onDelete) return;
+    triggerHaptic(40);
+    if (window.confirm(`Permanently remove "${initialData.alias || initialData.name}"? This action cannot be undone.`)) {
+      onDelete(initialData.id);
     }
   };
 
@@ -68,25 +67,43 @@ const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, o
             <h3 className="text-xs font-black uppercase tracking-widest dark:text-white">{isEditing ? 'Configure Account' : 'New Account'}</h3>
             <p className="text-[8px] font-black text-slate-400 uppercase mt-0.5">Account Registry</p>
           </div>
-          <button onClick={onCancel} className="p-2 bg-white dark:bg-slate-800 rounded-xl text-slate-400"><X size={18} /></button>
+          <div className="flex items-center gap-1">
+            {isEditing && onDelete && initialData?.id && (
+              <button 
+                type="button" 
+                onClick={handleDelete}
+                className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-all active:scale-90"
+                title="Delete Account"
+              >
+                <Trash2 size={18} strokeWidth={2.5} />
+              </button>
+            )}
+            <button 
+              type="button" 
+              onClick={onCancel} 
+              className="p-2 bg-white dark:bg-slate-800 rounded-xl text-slate-400 active:scale-90 transition-all"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Type Selector */}
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto no-scrollbar max-h-[70vh]">
+          {/* Group Type Selector */}
           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl">
             <button 
               type="button" 
-              onClick={() => setType('Investment')}
+              onClick={() => { setType('Investment'); if (!DEBIT_CATEGORIES.includes(category)) setCategory('Savings'); }}
               className={`flex-1 py-2 text-[9px] font-black uppercase rounded-xl transition-all ${type === 'Investment' ? 'bg-white dark:bg-slate-700 text-emerald-500 shadow-sm' : 'text-slate-400'}`}
             >
-              Asset
+              Debit (Asset)
             </button>
             <button 
               type="button" 
-              onClick={() => setType('Liability')}
+              onClick={() => { setType('Liability'); if (!CREDIT_CATEGORIES.includes(category)) setCategory('Card'); }}
               className={`flex-1 py-2 text-[9px] font-black uppercase rounded-xl transition-all ${type === 'Liability' ? 'bg-white dark:bg-slate-700 text-rose-500 shadow-sm' : 'text-slate-400'}`}
             >
-              Debt
+              Credit (Debt)
             </button>
           </div>
 
@@ -94,7 +111,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, o
             <div className="space-y-1.5">
               <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Instrument Category</span>
               <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
-                {WEALTH_CATEGORIES.map(cat => (
+                {(type === 'Investment' ? DEBIT_CATEGORIES : CREDIT_CATEGORIES).map(cat => (
                   <button 
                     key={cat} 
                     type="button" 
@@ -108,14 +125,32 @@ const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, o
             </div>
 
             <div className="space-y-1.5">
-              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Account Label</span>
+              <div className="flex items-center gap-1.5 ml-1">
+                <Tag size={10} className="text-slate-400" />
+                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Account Alias</span>
+              </div>
+              <input 
+                type="text" 
+                value={alias} 
+                onChange={(e) => setAlias(e.target.value)} 
+                placeholder="e.g. Daily Spending" 
+                className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl text-[11px] font-black outline-none border border-transparent focus:border-brand-primary dark:text-white"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 ml-1">
+                <Landmark size={10} className="text-slate-400" />
+                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Account Label (Key)</span>
+              </div>
               <input 
                 type="text" 
                 value={name} 
                 onChange={(e) => setName(e.target.value)} 
-                placeholder="e.g. HDFC Priority" 
-                className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl text-[11px] font-black outline-none border border-transparent focus:border-brand-primary"
+                placeholder="e.g. HDFC 1234 (Used for mapping)" 
+                className="w-full bg-slate-50 dark:bg-slate-800 p-3 rounded-2xl text-[11px] font-black outline-none border border-transparent focus:border-brand-primary dark:text-white"
               />
+              <p className="text-[7px] text-slate-400 font-bold px-1 italic">This label must match the account name in your bank logs.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -129,11 +164,11 @@ const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, o
                     value={value} 
                     onChange={(e) => setValue(e.target.value)} 
                     placeholder="0" 
-                    className="w-full bg-slate-50 dark:bg-slate-800 pl-8 pr-3 py-3 rounded-2xl text-[11px] font-black outline-none"
+                    className="w-full bg-slate-50 dark:bg-slate-800 pl-8 pr-3 py-3 rounded-2xl text-[11px] font-black outline-none dark:text-white"
                   />
                 </div>
               </div>
-              {category === 'Credit Card' && (
+              {category === 'Card' && (
                 <div className="space-y-1.5 animate-kick">
                   <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Total Limit</span>
                   <div className="relative">
@@ -144,7 +179,7 @@ const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, o
                       value={limit} 
                       onChange={(e) => setLimit(e.target.value)} 
                       placeholder="0" 
-                      className="w-full bg-slate-50 dark:bg-slate-800 pl-8 pr-3 py-3 rounded-2xl text-[11px] font-black outline-none"
+                      className="w-full bg-slate-50 dark:bg-slate-800 pl-8 pr-3 py-3 rounded-2xl text-[11px] font-black outline-none dark:text-white"
                     />
                   </div>
                 </div>
