@@ -1,7 +1,7 @@
 export type Category = 'Needs' | 'Wants' | 'Savings' | 'Uncategorized';
 export type Frequency = 'None' | 'Weekly' | 'Monthly' | 'Yearly';
 export type IncomeType = 'Salary' | 'Freelance' | 'Investment' | 'Gift' | 'Other';
-export type AppTheme = 'Spiderman' | 'CaptainAmerica' | 'Naruto' | 'Batman' | 'McQueen' | 'Frozen';
+export type AppTheme = 'Spiderman' | 'CaptainAmerica' | 'Naruto' | 'Batman';
 export type PaymentMethod = 'UPI' | 'Card' | 'Cash' | 'Net Banking' | 'Other';
 export type DensityLevel = 'Normal' | 'Simple' | 'Compact';
 

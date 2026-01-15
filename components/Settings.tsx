@@ -1,14 +1,69 @@
-import React, { useState, useRef } from 'react';
-import { UserSettings, UserProfile, AppTheme, Category } from '../types';
-import { SUPPORTED_CURRENCIES } from '../constants';
+import React, { useState, useRef, useEffect } from 'react';
+import { UserSettings, UserProfile, AppTheme, Category, WealthItem } from '../types';
 import { 
-  LogOut, ChevronRight, Calculator, Moon, Sun, 
-  Cloud, RefreshCw, Coins, Database, Eraser,
-  X, Download, Check, Upload, Palette, Zap, Sparkles, Loader2, FileSpreadsheet, Bomb,
-  ShieldAlert
+  LogOut, Calculator, Moon, Sun, 
+  Cloud, Database, Eraser,
+  X, Download, Check, Upload, Palette, Zap, Loader2, FileSpreadsheet, Bomb,
+  ShieldAlert, FolderOpen, Banknote, Shield, Heart
 } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { parseSmsLocally } from '../utils/smsParser';
+import { SUPPORTED_CURRENCIES, getCurrencySymbol } from '../constants';
+
+const NarutoIcon = () => (
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-md">
+    {/* Hair - Spiky Yellow */}
+    <path d="M50 5L60 15L75 10L78 25L95 25L85 45L95 60L80 65L75 85L55 75L50 95L45 75L25 85L20 65L5 60L15 45L5 25L22 25L25 10L40 15Z" fill="#FACC15" stroke="#1E293B" strokeWidth="1.5" />
+    {/* Face Shape */}
+    <path d="M28 40C28 40 28 85 50 85C72 85 72 40 72 40" fill="#FFE4E6" stroke="#1E293B" strokeWidth="1.5" />
+    {/* Whiskers */}
+    <g stroke="#1E293B" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M32 60L25 58" /><path d="M32 64L25 64" /><path d="M32 68L25 70" />
+      <path d="M68 60L75 58" /><path d="M68 64L75 64" /><path d="M68 68L75 70" />
+    </g>
+    {/* Happy Eyes (U-Shape) */}
+    <path d="M38 52C38 52 40 58 46 52" fill="none" stroke="#1E293B" strokeWidth="2.5" strokeLinecap="round" />
+    <path d="M54 52C54 52 56 58 62 52" fill="none" stroke="#1E293B" strokeWidth="2.5" strokeLinecap="round" />
+    {/* Smile */}
+    <path d="M42 72C45 76 55 76 58 72" fill="white" stroke="#1E293B" strokeWidth="1.5" />
+    {/* Headband / Forehead area hint */}
+    <path d="M28 40H72V50H28V40Z" fill="#F97316" stroke="#1E293B" strokeWidth="1.5" />
+  </svg>
+);
+
+const SpiderIcon = () => (
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-md">
+    <path d="M50 5C30 5 15 25 15 55C15 75 30 95 50 95C70 95 85 75 85 55C85 25 70 5 50 5Z" fill="#E11D48" />
+    <g stroke="#1E293B" strokeWidth="2" fill="none">
+      <path d="M50 5V95" />
+      <path d="M15 55H85" />
+      <path d="M25 25L75 85" />
+      <path d="M75 25L25 85" />
+      <circle cx="50" cy="55" r="15" />
+      <circle cx="50" cy="55" r="25" />
+      <circle cx="50" cy="55" r="35" />
+    </g>
+    <path d="M22 45C22 45 28 68 45 62C45 62 42 42 22 45Z" fill="white" stroke="#1E293B" strokeWidth="3" />
+    <path d="M78 45C78 45 72 68 55 62C55 62 58 42 78 45Z" fill="white" stroke="#1E293B" strokeWidth="3" />
+  </svg>
+);
+
+const CaptainAmericaIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-md">
+    <circle cx="12" cy="12" r="11" fill="#dc2626" />
+    <circle cx="12" cy="12" r="8" fill="white" />
+    <circle cx="12" cy="12" r="5" fill="#0284c7" />
+    <path d="M12 9l.9 1.8h2l-1.5 1.4.6 2-1.8-1.2-1.8 1.2.6-2-1.5-1.4h2L12 9z" fill="white" />
+  </svg>
+);
+
+const BatmanIcon = () => (
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-md">
+    <ellipse cx="50" cy="50" rx="48" ry="32" fill="#FACC15" stroke="black" strokeWidth="2" />
+    <path d="M50 35C48 35 48 40 47 40C45 40 40 25 25 25C20 25 15 35 15 45C15 65 40 75 50 75C60 75 85 65 85 45C85 35 80 25 75 25C60 25 55 40 53 40C52 40 52 35 50 35Z" fill="black" />
+    <path d="M47 40L50 30L53 40" fill="black" />
+  </svg>
+);
 
 interface SettingsProps {
   settings: UserSettings;
@@ -18,9 +73,7 @@ interface SettingsProps {
   onToggleTheme: () => void;
   onUpdateAppTheme: (theme: AppTheme) => void;
   onUpdateCurrency: (code: string) => void;
-  onUpdateDataFilter: (filter: 'all' | 'user' | 'mock') => void;
-  onUpdateSplit: (split: UserSettings['split']) => void;
-  onUpdateBaseIncome: (income: number) => void;
+  onUpdateSplit: (split: { Needs: number; Wants: number; Savings: number }) => void;
   onSync: () => void;
   onExport: () => void;
   onImport: (file: File) => void;
@@ -29,66 +82,16 @@ interface SettingsProps {
   onLoadMockData: () => void;
   onPurgeMockData: () => void;
   onPurgeAllData?: () => void;
-  onClearExpenses: () => void;
-  wealthItems?: any[];
+  wealthItems?: WealthItem[];
+  onUpdateDataFilter?: (filter: 'all' | 'user' | 'mock') => void;
+  onUpdateBaseIncome?: (income: number) => void;
+  onClearExpenses?: () => void;
 }
-
-const NarutoSageEye = () => (
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
-    <path d="M22 6C18 4 10 7 8 11C10 15 17 21 21 18C19 14 20 6 22 6Z" fill="#F97316" />
-    <path d="M2 12C2 12 5 7 11 7C17 7 20 12 20 12C20 12 17 17 11 17C5 17 2 12 2 12Z" fill="white" stroke="black" strokeWidth="0.5" />
-    <circle cx="11" cy="12" r="3.5" fill="#FACC15" />
-    <rect x="9.5" y="11.5" width="3" height="1" rx="0.2" fill="black" />
-  </svg>
-);
-
-const SpidermanIcon = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-md">
-    <path d="M12 10.5c-.8 0-1.5-.7-1.5-1.5s.7-1.5 1.5-1.5 1.5.7 1.5 1.5-.7 1.5-1.5 1.5zm0 8.5c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4zm8-10.5c-1.5-.5-3.5-1-5-1 .3-.3.5-.7.5-1.1 0-.8-.7-1.4-1.5-1.4s-1.5.6-1.5 1.4c0 .4.2.8.5 1.1-1.5 0-3.5.5-5 1-1.5.5-2.5 1.5-2.5 3 0 .5.1.9.2 1.3L2 14c-.3.2-.4.6-.2.9.2.3.6.4.9.2l3.2-2.1c.3.5.7.9 1.1 1.3L4.5 19c-.2.3-.1.7.2.9.3.2.7.1.9-.2l2.4-4.5c.6.4 1.3.7 2 .9V22c0 .3.3.6.6.6s.6-.3.6-.6v-5.7c.4.1.8.1 1.2.1s.8 0 1.2-.1V22c0 .3.3.6.6.6s.6-.3.6-.6v-5.9c.7-.2 1.4-.5 2-.9l2.4 4.5c.2.3.6.4.9.2.3-.2.4-.6.2-.9l-2.5-4.7c.4-.4.8-.8 1.1-1.3l3.2 2.1c.3.2.7.1.9-.2.2-.3.1-.7-.2-.9l-3.2-2.1c.1-.4.2-.8.2-1.3 0-1.5-1-2.5-2.5-3z" />
-  </svg>
-);
-
-const CaptainAmericaIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-md">
-    <circle cx="12" cy="12" r="11" fill="#0369a1" />
-    <circle cx="12" cy="12" r="8" stroke="white" strokeWidth="2" />
-    <circle cx="12" cy="12" r="5" fill="#dc2626" />
-    <path d="M12 9L12.8 10.8H14.8L13.2 12L13.8 14L12 12.8L10.2 14L10.8 12L9.2 10.8H11.2L12 9Z" fill="white" />
-  </svg>
-);
-
-const BatmanIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
-    <ellipse cx="12" cy="12" rx="11" ry="7" fill="#facc15" />
-    <path d="M12 7.5C10.5 7.5 9.5 9 8 9C7.5 9 7 8.5 6.5 8C5.5 8.5 5 10.5 5 12C5 14 6.5 16 12 16.5C17.5 16 19 14 19 12C19 10.5 18.5 8.5 17.5 8C17 8.5 16.5 9 16 9C14.5 9 13.5 7.5 12 7.5Z" fill="black" />
-    <path d="M11 7.5V6.5L10 7.5H11ZM13 7.5V6.5L14 7.5H13Z" fill="black" />
-  </svg>
-);
-
-const McQueenIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
-    <rect width="22" height="12" x="1" y="6" rx="3" fill="#ef4444" />
-    <path d="M5 11L7 8H17L19 11" stroke="white" strokeWidth="1.5" />
-    <path d="M4 14L20 12" stroke="#facc15" strokeWidth="2" strokeLinecap="round" />
-    <circle cx="6" cy="16" r="3" fill="black" />
-    <circle cx="18" cy="16" r="3" fill="black" />
-    <circle cx="6" cy="16" r="1" fill="#64748b" />
-    <circle cx="18" cy="16" r="1" fill="#64748b" />
-  </svg>
-);
-
-const FrozenIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full drop-shadow-sm">
-    <path d="M12 2V22M2 12H22M5 5L19 19M19 5L5 19" stroke="#0ea5e9" strokeWidth="2" strokeLinecap="round" />
-    <path d="M12 6L10 4M12 6L14 4M12 18L10 20M12 18L14 20M6 12L4 10M6 12L4 14M18 12L20 10M18 12L20 14" stroke="#0ea5e9" strokeWidth="1.5" strokeLinecap="round" />
-    <circle cx="12" cy="12" r="3" fill="white" stroke="#0ea5e9" strokeWidth="0.5" />
-  </svg>
-);
 
 const Settings: React.FC<SettingsProps> = ({ 
   settings, user, onLogout, onReset, onToggleTheme, onUpdateAppTheme, onUpdateCurrency, 
   onUpdateSplit, onSync, onExport, onImport, onAddBulk, isSyncing, onLoadMockData, onPurgeMockData, onPurgeAllData,
-  wealthItems = []
+  onUpdateBaseIncome, wealthItems = []
 }) => {
   const isDark = settings.theme === 'dark';
   const [showCurrencyModal, setShowCurrencyModal] = useState(false);
@@ -98,19 +101,24 @@ const Settings: React.FC<SettingsProps> = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isReadingFile, setIsReadingFile] = useState(false);
   const [tempSplit, setTempSplit] = useState(settings.split);
+  const [tempIncome, setTempIncome] = useState(settings.monthlyIncome);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvFileInputRef = useRef<HTMLInputElement>(null);
 
-  const currentCurrency = SUPPORTED_CURRENCIES.find(c => c.code === settings.currency) || SUPPORTED_CURRENCIES[0];
+  // Sync internal modal state when modal opens
+  useEffect(() => {
+    if (showSplitModal) {
+      setTempSplit(settings.split);
+      setTempIncome(settings.monthlyIncome);
+    }
+  }, [showSplitModal, settings.split, settings.monthlyIncome]);
 
   const themes: { id: AppTheme, icon: React.ReactNode }[] = [
-    { id: 'Spiderman', icon: <SpidermanIcon /> },
+    { id: 'Spiderman', icon: <SpiderIcon /> },
     { id: 'CaptainAmerica', icon: <CaptainAmericaIcon /> },
-    { id: 'Naruto', icon: <NarutoSageEye /> },
-    { id: 'Batman', icon: <BatmanIcon /> },
-    { id: 'McQueen', icon: <McQueenIcon /> },
-    { id: 'Frozen', icon: <FrozenIcon /> }
+    { id: 'Naruto', icon: <NarutoIcon /> },
+    { id: 'Batman', icon: <BatmanIcon /> }
   ];
 
   const handleUpdateTempSplit = (cat: Category, val: number) => {
@@ -128,6 +136,9 @@ const Settings: React.FC<SettingsProps> = ({
   const saveSplitSettings = () => { 
     triggerHaptic(); 
     onUpdateSplit(tempSplit); 
+    if (onUpdateBaseIncome) {
+      onUpdateBaseIncome(tempIncome);
+    }
     setShowSplitModal(false); 
   };
 
@@ -142,105 +153,104 @@ const Settings: React.FC<SettingsProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const processRawText = async (text: string) => {
+    if (!text || !text.trim()) return;
+    triggerHaptic();
+    setIsAnalyzing(true);
+    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      const results = parseSmsLocally(text);
+      if (results?.length > 0) {
+        onAddBulk(results);
+        setShowImportModal(false);
+        setImportText('');
+      } else {
+        alert("No valid financial signals identified in the provided text.");
+      }
+    } catch (err) { 
+      alert("An error occurred while processing the ledger data.");
+    } finally { 
+      setIsAnalyzing(false); 
+    }
+  };
+
   const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     triggerHaptic();
     setIsReadingFile(true);
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target?.result as string;
       setImportText(content);
       setIsReadingFile(false);
+      await processRawText(content);
     };
     reader.onerror = () => {
       setIsReadingFile(false);
       alert("Error reading file.");
     };
     reader.readAsText(file);
-    if (csvFileInputRef.current) csvFileInputRef.current.value = '';
+    if (e.target) e.target.value = '';
   };
 
-  const handleBatchImport = async () => {
-    if (!importText.trim()) return;
-    triggerHaptic();
-    setIsAnalyzing(true);
-    
-    await new Promise(resolve => setTimeout(resolve, 1200));
-
-    try {
-      const results = parseSmsLocally(importText);
-      if (results?.length > 0) {
-        onAddBulk(results);
-        setShowImportModal(false);
-        setImportText('');
-      } else {
-        alert("Found no valid transaction or account data.");
-      }
-    } catch (err) { 
-      alert("Parsing error.");
-    } finally { 
-      setIsAnalyzing(false); 
-    }
+  const handleBatchImportManual = () => {
+    processRawText(importText);
   };
 
   const sectionClass = "bg-white dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-2xl mb-3 overflow-hidden shadow-sm";
   const labelClass = "text-[8px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3 px-1";
 
   return (
-    <div className="pb-12 pt-1 animate-slide-up">
-      <div className="bg-gradient-to-r from-slate-800 to-slate-950 dark:from-slate-900 dark:to-black px-5 py-4 rounded-2xl mb-2 shadow-md">
+    <div className="pb-4 pt-1 animate-slide-up">
+      <div className="bg-gradient-to-r from-brand-primary to-brand-secondary px-5 py-4 rounded-2xl mb-2 shadow-md">
         <div className="flex justify-between items-center w-full">
           <div>
             <h1 className="text-sm font-black text-white tracking-tighter uppercase leading-none">Settings</h1>
             <p className="text-[7px] font-black text-white/50 uppercase tracking-[0.2em] mt-1">Configuration Protocol</p>
           </div>
-          <button onClick={onLogout} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl text-white backdrop-blur-md transition-all active:scale-90">
-             <LogOut size={14} />
-          </button>
         </div>
       </div>
       
-      <div>
+      <div className="px-1">
         <section className={sectionClass}>
-          <div className="p-4">
+          <div className="p-4 pb-6">
             <h3 className={labelClass}><Palette size={10} /> Visual Identity</h3>
             
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black text-slate-500 uppercase">Ambience</p>
+            <div className="flex items-center justify-between px-2 pt-2">
+              {/* Theme Polar Toggle */}
+              <button 
+                onClick={() => { triggerHaptic(); onToggleTheme(); }} 
+                className={`w-14 h-14 rounded-2xl border-2 flex items-center justify-center transition-all active:scale-90 shrink-0 ${
+                  isDark ? 'bg-slate-800 border-slate-700 text-indigo-400 shadow-lg' : 'bg-slate-50 border-slate-200 text-amber-500 shadow-sm'
+                }`}
+              >
+                {isDark ? <Moon size={24} strokeWidth={2.5} /> : <Sun size={24} strokeWidth={2.5} />}
+              </button>
+
+              <div className="h-10 w-[1px] bg-slate-100 dark:bg-slate-800 mx-2 shrink-0"></div>
+
+              {/* Theme Icons - Floating, no box */}
+              {themes.map(t => (
                 <button 
-                  onClick={() => { triggerHaptic(); onToggleTheme(); }} 
-                  className={`w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all active:scale-90 ${
-                    isDark ? 'bg-slate-800 border-slate-700 text-indigo-400' : 'bg-slate-50 border-slate-200 text-amber-500'
+                  key={t.id} 
+                  onClick={() => { triggerHaptic(); onUpdateAppTheme(t.id); }} 
+                  className={`w-14 h-14 transition-all active:scale-90 flex items-center justify-center relative shrink-0 ${
+                    settings.appTheme === t.id 
+                      ? 'scale-125 z-10 opacity-100' 
+                      : 'opacity-40 grayscale-[0.3] hover:opacity-100 hover:scale-110'
                   }`}
                 >
-                  {isDark ? <Moon size={18} strokeWidth={2.5} /> : <Sun size={18} strokeWidth={2.5} />}
-                </button>
-              </div>
-
-              <div className="grid grid-cols-6 gap-2">
-                {themes.map(t => (
-                  <button 
-                    key={t.id} 
-                    onClick={() => { triggerHaptic(); onUpdateAppTheme(t.id); }} 
-                    className={`aspect-square rounded-xl border-2 transition-all active:scale-90 flex items-center justify-center p-1 relative ${
-                      settings.appTheme === t.id 
-                        ? 'border-brand-primary bg-brand-primary/10 scale-110 shadow-md z-10' 
-                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900'
-                    }`}
-                  >
-                    <div className="w-full h-full flex items-center justify-center">
-                      {t.icon}
+                  <div className="w-full h-full p-0.5">
+                    {t.icon}
+                  </div>
+                  {settings.appTheme === t.id && (
+                    <div className="absolute -bottom-1 -right-1 bg-brand-primary text-white p-0.5 rounded-full ring-2 ring-white dark:ring-slate-950 shadow-md">
+                      <Check size={8} strokeWidth={5} />
                     </div>
-                    {settings.appTheme === t.id && (
-                      <div className="absolute -top-1 -right-1 bg-brand-primary text-white p-0.5 rounded-full ring-1 ring-white dark:ring-slate-950">
-                        <Check size={6} strokeWidth={5} />
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
+                  )}
+                </button>
+              ))}
             </div>
           </div>
         </section>
@@ -266,7 +276,7 @@ const Settings: React.FC<SettingsProps> = ({
             <h3 className={labelClass}><Database size={10} /> Data Management</h3>
             <div className="grid grid-cols-2 gap-2 mb-2">
               <button onClick={onSync} disabled={isSyncing || !user?.accessToken} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-indigo-600 text-white shadow-md active:scale-95 transition-all disabled:opacity-50">
-                {isSyncing ? <RefreshCw size={14} className="animate-spin" /> : <Cloud size={14} />}
+                {isSyncing ? <Loader2 size={14} className="animate-spin" /> : <Cloud size={14} />}
                 <span className="text-[9px] font-black uppercase tracking-widest">{!user?.accessToken ? 'No Auth' : 'Vault Sync'}</span>
               </button>
               <button onClick={() => { triggerHaptic(); setShowImportModal(true); }} className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-slate-900 text-white shadow-md active:scale-95 transition-all">
@@ -295,21 +305,49 @@ const Settings: React.FC<SettingsProps> = ({
           </div>
         </section>
 
-        <section className="mb-8 space-y-2">
-          <button onClick={() => { triggerHaptic(20); onPurgeMockData(); }} className="w-full flex items-center justify-center gap-2 py-3 text-slate-400 dark:text-slate-600 hover:text-rose-500 transition-colors active:scale-95">
-             <Eraser size={12} />
-             <span className="text-[9px] font-black uppercase tracking-[0.2em]">Purge Simulated Data</span>
-          </button>
-          
-          <button onClick={() => { triggerHaptic(30); onPurgeAllData?.(); }} className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-rose-50/50 dark:bg-rose-950/10 border border-rose-100 dark:border-rose-900/20 text-rose-500 active:scale-95 transition-all">
-            <Bomb size={14} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Purge All Ledger Data</span>
-          </button>
+        {/* Action Row: Danger & Session Protocols */}
+        <section className="mt-4 mb-2">
+          <div className="grid grid-cols-4 gap-2 px-3 py-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[32px] shadow-sm">
+            <button 
+              onClick={() => { triggerHaptic(20); onPurgeMockData(); }} 
+              className="flex flex-col items-center gap-2 group active:scale-90 transition-all"
+            >
+              <div className="p-3 bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover:text-rose-500 rounded-2xl border border-slate-100 dark:border-slate-700">
+                <Eraser size={18} />
+              </div>
+              <span className="text-[7px] font-black uppercase text-slate-400 tracking-tighter">Mock</span>
+            </button>
+            
+            <button 
+              onClick={() => { triggerHaptic(30); onPurgeAllData?.(); }} 
+              className="flex flex-col items-center gap-2 group active:scale-90 transition-all"
+            >
+              <div className="p-3 bg-rose-50 dark:bg-rose-950/20 text-rose-500 rounded-2xl border border-rose-100 dark:border-rose-900/30">
+                <Bomb size={18} />
+              </div>
+              <span className="text-[7px] font-black uppercase text-rose-500 tracking-tighter">Purge</span>
+            </button>
 
-          <button onClick={onReset} className="w-full flex items-center justify-center gap-2 py-3 text-slate-400 dark:text-slate-600 hover:text-rose-500 transition-colors active:scale-95">
-            <ShieldAlert size={12} />
-            <span className="text-[9px] font-black uppercase tracking-[0.2em]">Full Factory Reset</span>
-          </button>
+            <button 
+              onClick={() => { triggerHaptic(40); onReset(); }} 
+              className="flex flex-col items-center gap-2 group active:scale-90 transition-all"
+            >
+              <div className="p-3 bg-slate-50 dark:bg-slate-800 text-slate-400 group-hover:text-amber-500 rounded-2xl border border-slate-100 dark:border-slate-700">
+                <ShieldAlert size={18} />
+              </div>
+              <span className="text-[7px] font-black uppercase text-slate-400 tracking-tighter">Reset</span>
+            </button>
+
+            <button 
+              onClick={() => { triggerHaptic(20); onLogout(); }}
+              className="flex flex-col items-center gap-2 group active:scale-90 transition-all"
+            >
+              <div className="p-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-2xl shadow-lg">
+                <LogOut size={18} />
+              </div>
+              <span className="text-[7px] font-black uppercase text-slate-900 dark:text-white tracking-tighter">Exit</span>
+            </button>
+          </div>
         </section>
       </div>
 
@@ -318,7 +356,7 @@ const Settings: React.FC<SettingsProps> = ({
           <div className="bg-white dark:bg-slate-950 w-full max-w-sm rounded-t-[32px] animate-slide-up shadow-2xl overflow-hidden">
             <div className="flex justify-between items-center px-6 py-5 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-xs font-black uppercase dark:text-white tracking-widest">Select Currency</h3>
-              <button onClick={() => { triggerHaptic(); setShowCurrencyModal(false); }} className="p-2 bg-slate-50 dark:bg-slate-900 rounded-full text-slate-400 active:scale-90 transition-transform"><X size={16} /></button>
+              <button onClick={() => { triggerHaptic(); setShowCurrencyModal(false); }} className="p-2 bg-slate-100 dark:bg-slate-900 rounded-full text-slate-400 active:scale-90 transition-transform"><X size={16} /></button>
             </div>
             <div className="p-4 space-y-1 max-h-[50vh] overflow-y-auto no-scrollbar">
               {SUPPORTED_CURRENCIES.map(curr => (
@@ -335,16 +373,80 @@ const Settings: React.FC<SettingsProps> = ({
       {showSplitModal && (
         <div className="fixed inset-0 bg-black/60 z-[130] flex items-end justify-center backdrop-blur-sm">
           <div className="bg-white dark:bg-slate-950 w-full max-w-sm rounded-t-[32px] animate-slide-up shadow-2xl p-6 space-y-6">
-              <div className="flex justify-between items-center"><h3 className="text-xs font-black uppercase dark:text-white tracking-widest">Allocation Protocols</h3><button onClick={() => { triggerHaptic(); setShowSplitModal(false); }}><X size={16} className="text-slate-400 active:scale-90 transition-transform" /></button></div>
-              <div className="space-y-5">
+              <div className="flex justify-between items-center">
+                <h3 className="text-xs font-black uppercase dark:text-white tracking-widest">Allocation Protocols</h3>
+                <button onClick={() => { triggerHaptic(); setShowSplitModal(false); }}>
+                  <X size={16} className="text-slate-400 active:scale-90 transition-transform" />
+                </button>
+              </div>
+
+              {/* Monthly Salary Input Section */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-2">
+                  <Banknote size={14} className="text-indigo-500" />
+                  <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Monthly Base Income</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-slate-300">
+                    {getCurrencySymbol(settings.currency)}
+                  </span>
+                  <input 
+                    type="number" 
+                    value={tempIncome === 0 ? '' : tempIncome} 
+                    onChange={(e) => setTempIncome(Math.round(parseFloat(e.target.value) || 0))}
+                    placeholder="0"
+                    className="w-full bg-slate-50 dark:bg-slate-900 pl-8 pr-4 py-4 rounded-2xl text-lg font-black outline-none border border-slate-100 dark:border-slate-800 text-slate-900 dark:text-white focus:border-indigo-500/30 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Sliders Section */}
+              <div className="space-y-5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <Calculator size={14} className="text-brand-primary" />
+                  <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">Percentage Distribution</span>
+                </div>
                 {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
                   <div key={cat} className="space-y-2">
-                    <div className="flex justify-between text-[8px] font-black uppercase text-slate-400 tracking-widest"><span>{cat}</span><span>{tempSplit[cat]}%</span></div>
-                    <input type="range" min="0" max="100" value={tempSplit[cat]} onChange={(e) => handleUpdateTempSplit(cat, parseInt(e.target.value))} className="w-full accent-indigo-500 h-1 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" />
+                    <div className="flex justify-between text-[8px] font-black uppercase text-slate-400 tracking-widest">
+                      <span>{cat}</span>
+                      <span className="font-black text-slate-900 dark:text-white">{tempSplit[cat]}%</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      value={tempSplit[cat]} 
+                      onChange={(e) => handleUpdateTempSplit(cat, parseInt(e.target.value))} 
+                      className="w-full accent-indigo-500 h-1 bg-slate-100 dark:bg-slate-800 rounded-lg appearance-none cursor-pointer" 
+                    />
                   </div>
                 ))}
+                
+                <div className="p-3 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-xl border border-indigo-100/50 dark:border-indigo-800/30">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Projected Monthly Caps</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
+                      <div key={cat} className="text-center">
+                        <p className="text-[6px] font-black text-slate-400 uppercase mb-0.5">{cat}</p>
+                        <p className="text-[9px] font-black text-slate-700 dark:text-slate-300">
+                          {getCurrencySymbol(settings.currency)}{Math.round((tempIncome * tempSplit[cat]) / 100).toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <button onClick={saveSplitSettings} className="w-full py-4 bg-slate-900 dark:bg-indigo-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl active:scale-[0.98] transition-all">Save Changes</button>
+              
+              <button 
+                onClick={saveSplitSettings} 
+                className="w-full py-4 bg-slate-900 dark:bg-indigo-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+              >
+                <Check size={14} strokeWidth={4} />
+                Authorize Protocol Updates
+              </button>
           </div>
         </div>
       )}
@@ -354,7 +456,16 @@ const Settings: React.FC<SettingsProps> = ({
           <div className="bg-white dark:bg-slate-950 w-full rounded-t-[32px] shadow-2xl flex flex-col max-h-[85vh] animate-slide-up">
              <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 dark:border-slate-800">
                 <h3 className="text-xs font-black uppercase dark:text-white tracking-widest">Import CSV</h3>
-                <button onClick={() => { triggerHaptic(); setShowImportModal(false); }} className="p-2 bg-slate-100 dark:bg-slate-900 rounded-full text-slate-400 active:scale-90 transition-transform"><X size={18} /></button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => { triggerHaptic(); if (csvFileInputRef.current) csvFileInputRef.current.click(); }}
+                    className="p-2 bg-indigo-50 dark:bg-indigo-900/40 rounded-full text-indigo-500 active:scale-90 transition-transform"
+                    title="Browse Files"
+                  >
+                    <FolderOpen size={18} />
+                  </button>
+                  <button onClick={() => { triggerHaptic(); setShowImportModal(false); }} className="p-2 bg-slate-100 dark:bg-slate-900 rounded-full text-slate-400 active:scale-90 transition-transform"><X size={18} /></button>
+                </div>
              </div>
              <div className="p-6 overflow-y-auto no-scrollbar space-y-4">
                 <div className="relative">
@@ -364,9 +475,17 @@ const Settings: React.FC<SettingsProps> = ({
                     placeholder="Paste CSV rows or banking financial logs here..." 
                     className="w-full h-44 bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl text-[11px] font-medium outline-none border border-slate-100 dark:border-slate-800 dark:text-white resize-none transition-all focus:border-brand-primary" 
                   />
+                  {(isReadingFile || isAnalyzing) && (
+                    <div className="absolute inset-0 bg-white/60 dark:bg-slate-950/60 backdrop-blur-sm rounded-2xl flex items-center justify-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <Loader2 size={32} className="animate-spin text-brand-primary" />
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-900 dark:text-white">{isReadingFile ? 'Reading File...' : 'Ingesting Ledger...'}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
-                <button onClick={handleBatchImport} disabled={!importText || isAnalyzing} className="w-full bg-slate-900 dark:bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 text-[10px] uppercase tracking-[0.2em] disabled:opacity-50 transition-all active:scale-[0.98]">
+                <button onClick={handleBatchImportManual} disabled={!importText || isAnalyzing} className="w-full bg-slate-900 dark:bg-indigo-600 text-white font-black py-4 rounded-2xl shadow-xl flex items-center justify-center gap-3 text-[10px] uppercase tracking-[0.2em] disabled:opacity-50 transition-all active:scale-[0.98]">
                   {isAnalyzing ? (
                     <>
                       <Loader2 size={18} className="animate-spin" /> Processing Ledger...
@@ -377,6 +496,13 @@ const Settings: React.FC<SettingsProps> = ({
                     </>
                   )}
                 </button>
+                <input 
+                  type="file" 
+                  ref={csvFileInputRef} 
+                  onChange={handleCsvFileChange} 
+                  accept=".csv,text/csv,text/plain" 
+                  className="sr-only" 
+                />
              </div>
           </div>
         </div>

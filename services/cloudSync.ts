@@ -4,18 +4,21 @@
  * official Google Drive REST API and handle multipart uploads.
  */
 
+import { Expense, Income, WealthItem, BudgetItem, Bill, Notification, UserSettings, BudgetRule } from '../types';
+
 export interface BackupData {
-  expenses: any[];
-  incomes: any[];
-  wealthItems: any[];
-  budgetItems: any[];
-  bills: any[];
-  notifications: any[];
-  settings: any;
+  expenses: Expense[];
+  incomes: Income[];
+  wealthItems: WealthItem[];
+  budgetItems: BudgetItem[];
+  rules: BudgetRule[];
+  bills: Bill[];
+  notifications: Notification[];
+  settings: UserSettings;
   timestamp: string;
 }
 
-const CLOUD_STORAGE_KEY = 'jk_cloud_backup_sim_vault';
+const CLOUD_STORAGE_KEY = 'jk_cloud_backup_sim_vault_v2';
 
 export async function syncToGoogleDrive(accessToken: string, data: Omit<BackupData, 'timestamp'>): Promise<string> {
   console.log("JK PORTAL: Initiating Encrypted Stream to Cloud Vault...");

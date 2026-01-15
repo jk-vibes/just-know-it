@@ -22,8 +22,10 @@ const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, o
   const [category, setCategory] = useState<WealthCategory>(initialData?.category || 'Savings');
   const [name, setName] = useState(initialData?.name || '');
   const [alias, setAlias] = useState(initialData?.alias || '');
-  const [value, setValue] = useState(initialData ? Math.round(initialData.value).toString() : '');
-  const [limit, setLimit] = useState(initialData?.limit ? Math.round(initialData.limit).toString() : '');
+  
+  // Use empty string if value is 0 or undefined to prevent "prefixing 0" behavior
+  const [value, setValue] = useState(initialData && initialData.value !== 0 ? Math.round(initialData.value).toString() : '');
+  const [limit, setLimit] = useState(initialData?.limit && initialData.limit !== 0 ? Math.round(initialData.limit).toString() : '');
 
   const currencySymbol = getCurrencySymbol(settings.currency);
 
@@ -36,12 +38,12 @@ const AccountForm: React.FC<AccountFormProps> = ({ settings, onSave, onUpdate, o
       category,
       name: name.trim(),
       alias: (alias || name).trim(),
-      value: Math.round(parseFloat(value)),
+      value: Math.round(parseFloat(value) || 0),
       date: new Date().toISOString()
     };
 
     if (category === 'Card' && limit) {
-      payload.limit = Math.round(parseFloat(limit));
+      payload.limit = Math.round(parseFloat(limit) || 0);
     }
 
     if (isEditing && onUpdate && initialData?.id) {

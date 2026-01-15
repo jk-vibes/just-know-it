@@ -17,7 +17,9 @@ export const SUB_CATEGORIES: Record<Category, string[]> = {
     'Health/Insurance', 
     'Education', 
     'Household', 
-    'Debt Interest'
+    'Debt Interest',
+    'Loan',
+    'Credit Card'
   ],
   Wants: [
     'Dining', 

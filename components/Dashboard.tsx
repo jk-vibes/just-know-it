@@ -13,7 +13,7 @@ import {
   Target, BarChart3, ListOrdered, 
   Clock, Flame, Droplets, ArrowRight, CalendarDays,
   LineChart as LineChartIcon, ArrowLeftRight, Layers, BarChart as BarChartIcon,
-  ArrowDownCircle, ArrowUpCircle, AlignLeft, BarChart2
+  ArrowDownCircle, ArrowUpCircle, AlignLeft, BarChart2, BrainCircuit, AlertCircle
 } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { getBudgetInsights, getExpensesHash } from '../services/geminiService';
@@ -34,7 +34,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ 
-  expenses, incomes, wealthItems, settings, viewDate, onInsightsReceived, user
+  expenses, incomes, wealthItems, settings, viewDate, onInsightsReceived, user, onCategorizeClick
 }) => {
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [insights, setInsights] = useState<{ tip: string, impact: string }[] | null>(null);
@@ -45,6 +45,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   const initialFetchRef = useRef(false);
   const lastHashRef = useRef<string>("");
   const currencySymbol = getCurrencySymbol(settings.currency);
+
+  const pendingCount = useMemo(() => expenses.filter(e => !e.isConfirmed).length, [expenses]);
 
   const triggerInsightsFetch = async (force = false) => {
     if (force) triggerHaptic();
@@ -204,7 +206,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="pb-1 pt-1">
-      <div className="bg-gradient-to-r from-blue-700 to-indigo-800 px-5 py-4 rounded-2xl mb-4 mx-1 shadow-xl relative overflow-hidden group">
+      <div className="bg-gradient-to-r from-brand-primary to-brand-secondary px-5 py-4 rounded-2xl mb-4 mx-1 shadow-xl relative overflow-hidden group">
         <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
         <div className="flex justify-between items-center w-full relative z-10">
           <div>
@@ -226,6 +228,28 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
       
       <div>
+        {/* Proactive AI Categorization Trigger */}
+        {pendingCount > 0 && (
+          <div 
+            onClick={() => { triggerHaptic(); onCategorizeClick(); }}
+            className="bg-indigo-600 rounded-[28px] p-4 mb-4 mx-1 flex items-center justify-between shadow-lg shadow-indigo-100 dark:shadow-none cursor-pointer group active:scale-[0.98] transition-all animate-kick"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center text-white backdrop-blur-md border border-white/10">
+                 <BrainCircuit size={24} strokeWidth={2.5} className="group-hover:rotate-12 transition-transform" />
+              </div>
+              <div>
+                <p className="text-[9px] font-black text-indigo-100 uppercase tracking-[0.2em] leading-none">Neural Audit Required</p>
+                <h3 className="text-sm font-black text-white mt-1.5">{pendingCount} Pending Signals</h3>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-xl text-white">
+               <span className="text-[10px] font-black uppercase tracking-widest">Start</span>
+               <ArrowRight size={14} strokeWidth={3} />
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 mb-3">
           <section className={`${sectionClass} border-l-4 border-l-brand-primary !mb-0`}>
             <div className="absolute -right-4 -bottom-4 opacity-5 text-brand-primary transform rotate-12 scale-150"><Flame size={64} /></div>

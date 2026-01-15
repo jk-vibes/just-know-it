@@ -16,7 +16,6 @@ import {
   Check, CheckCircle2, ListChecks, Square, CheckSquare,
   Tag, CheckCircle,
   CreditCard, Coins, Star, Heart, Receipt,
-  // Fix: Added missing Wallet icon import
   Wallet
 } from 'lucide-react';
 import { auditTransaction, refineBatchTransactions } from '../services/geminiService';
@@ -489,7 +488,7 @@ const Ledger: React.FC<LedgerProps> = ({
   };
 
   return (
-    <div className="pb-32 pt-1 animate-slide-up">
+    <div className="animate-slide-up">
       <div className={`bg-gradient-to-r from-brand-primary to-brand-secondary px-5 py-4 rounded-2xl mb-1 shadow-md transition-all ${isSelectionMode ? 'ring-4 ring-brand-primary/20 ring-inset' : ''}`}>
         <div className="flex justify-between items-center w-full">
           <div>

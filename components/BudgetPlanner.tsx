@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { BudgetItem, RecurringItem, UserSettings, Category, Expense, Bill } from '../types';
 import { CATEGORY_COLORS, getCurrencySymbol, SUB_CATEGORIES } from '../constants';
-import { Target, Plus, Trash2, PieChart, ChevronDown, ChevronUp, AlertCircle, Info, Bookmark, Sparkles, Loader2, X, TrendingUp, Check, Layers, Tag, Clock, Calendar, ShieldCheck, ArrowRight, Repeat, Store, Camera } from 'lucide-react';
+import { Target, Plus, Trash2, PieChart, ChevronDown, ChevronUp, AlertCircle, Info, Bookmark, Sparkles, Loader2, X, TrendingUp, Check, Layers, Tag, Clock, Calendar, ShieldCheck, ArrowRight, Repeat, Store, Camera, Zap } from 'lucide-react';
 import { triggerHaptic } from '../utils/haptics';
 import { predictBudgetCategory } from '../services/geminiService';
 
@@ -63,46 +63,115 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
     }
   }, [editingItem]);
 
-  const itemUtilization = useMemo(() => {
-    const currentMonth = viewDate.getMonth();
-    const currentYear = viewDate.getFullYear();
-    const currentExps = expenses.filter(e => {
-      const d = new Date(e.date);
-      return e.isConfirmed && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  const currentMonthExpenses = useMemo(() => {
+    const m = viewDate.getMonth();
+    const y = viewDate.getFullYear();
+    return expenses.filter(e => {
+      if (!e.date) return false;
+      const parts = e.date.split('-');
+      if (parts.length < 2) return false;
+      const ey = parseInt(parts[0]);
+      const em = parseInt(parts[1]) - 1;
+      // Include ALL monthly outflows for utilization, even unconfirmed ones, 
+      // excluding internal transfers.
+      return em === m && ey === y && e.subCategory !== 'Transfer';
+    });
+  }, [expenses, viewDate]);
+
+  // Combined utilization + Dynamic Unplanned Nodes
+  const displayNodes = useMemo(() => {
+    const nodes: Record<string, { item: BudgetItem; actual: number; isUnplanned?: boolean }> = {};
+    
+    // Initialize with planned items
+    budgetItems.forEach(item => {
+      nodes[item.id] = { item, actual: 0 };
     });
 
-    const mapping: Record<string, number> = {};
-    budgetItems.forEach(item => {
-      const matchedAmount = currentExps
-        .filter(e => {
-          const catMatch = e.category === item.category;
-          const subMatch = e.subCategory === item.subCategory;
-          if (catMatch && subMatch) return true;
-          if (catMatch && item.name && (e.merchant?.toLowerCase().includes(item.name.toLowerCase()) || e.note?.toLowerCase().includes(item.name.toLowerCase()))) return true;
-          return false;
-        })
-        .reduce((sum, e) => sum + e.amount, 0);
-      mapping[item.id] = Math.round(matchedAmount);
-    });
-    return mapping;
-  }, [budgetItems, expenses, viewDate]);
+    const categoryUnplanned: Record<Category, Record<string, number>> = {
+      Needs: {}, Wants: {}, Savings: {}, Uncategorized: {}
+    };
 
-  const summary = useMemo(() => {
-    const totals = { Needs: 0, Wants: 0, Savings: 0 };
-    const spentTotals = { Needs: 0, Wants: 0, Savings: 0 };
-    budgetItems.forEach(item => {
-      if (item.category !== 'Uncategorized') {
-        totals[item.category] += item.amount;
-        spentTotals[item.category] += (itemUtilization[item.id] || 0);
+    currentMonthExpenses.forEach(e => {
+      let matchedId: string | null = null;
+
+      // Matching Strategy: 
+      // 1. Direct subcategory match
+      // 2. Partial name match in merchant/note
+      const candidates = budgetItems.filter(i => i.category === e.category);
+      
+      // Try subcategory first
+      const subMatch = candidates.find(i => i.subCategory === e.subCategory);
+      if (subMatch) {
+        matchedId = subMatch.id;
+      } else {
+        // Try partial name match
+        const nameMatch = candidates.find(i => {
+           const label = (e.merchant || e.note || '').toLowerCase();
+           const nodeName = i.name.toLowerCase();
+           return label.includes(nodeName) || nodeName.includes(label);
+        });
+        if (nameMatch) matchedId = nameMatch.id;
+      }
+
+      if (matchedId) {
+        nodes[matchedId].actual += e.amount;
+      } else {
+        // Track unplanned by category then subcategory
+        const cat = e.category || 'Uncategorized';
+        const sc = e.subCategory || 'General';
+        if (!categoryUnplanned[cat]) categoryUnplanned[cat] = {};
+        categoryUnplanned[cat][sc] = (categoryUnplanned[cat][sc] || 0) + e.amount;
       }
     });
+
+    // Convert unplanned spending into display items
+    Object.entries(categoryUnplanned).forEach(([cat, subs]) => {
+      Object.entries(subs).forEach(([sc, amount]) => {
+        const id = `unplanned-${cat}-${sc}`;
+        nodes[id] = {
+          item: {
+            id,
+            name: `${sc} (Unplanned)`,
+            category: cat as Category,
+            subCategory: sc,
+            amount: 0 // Target is 0 since it wasn't planned
+          },
+          actual: Math.round(amount),
+          isUnplanned: true
+        };
+      });
+    });
+
+    return Object.values(nodes).sort((a, b) => (b.actual - a.actual));
+  }, [budgetItems, currentMonthExpenses]);
+
+  const summary = useMemo(() => {
+    const totals = { Needs: 0, Wants: 0, Savings: 0, Uncategorized: 0 };
+    const realizedTotals = { Needs: 0, Wants: 0, Savings: 0, Uncategorized: 0 };
+    
+    budgetItems.forEach(item => {
+      totals[item.category] = (totals[item.category] || 0) + item.amount;
+    });
+
+    currentMonthExpenses.forEach(e => {
+      realizedTotals[e.category] = (realizedTotals[e.category] || 0) + e.amount;
+    });
+
     const targets = {
       Needs: (settings.monthlyIncome * settings.split.Needs) / 100,
       Wants: (settings.monthlyIncome * settings.split.Wants) / 100,
-      Savings: (settings.monthlyIncome * settings.split.Savings) / 100
+      Savings: (settings.monthlyIncome * settings.split.Savings) / 100,
+      Uncategorized: 0
     };
-    return { totals, targets, spentTotals, grandTotal: totals.Needs + totals.Wants + totals.Savings, grandSpent: spentTotals.Needs + spentTotals.Wants + spentTotals.Savings };
-  }, [budgetItems, settings.monthlyIncome, settings.split, itemUtilization]);
+
+    return { 
+      totals, 
+      targets, 
+      realizedTotals, 
+      grandTotal: totals.Needs + totals.Wants + totals.Savings, 
+      grandRealized: realizedTotals.Needs + realizedTotals.Wants + realizedTotals.Savings + realizedTotals.Uncategorized
+    };
+  }, [budgetItems, settings.monthlyIncome, settings.split, currentMonthExpenses]);
 
   const handleDetectCategory = async () => {
     if (!newItemName.trim() || isDetecting) return;
@@ -139,9 +208,10 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
     setEditingItem(null);
   };
 
-  const handleItemClick = (item: BudgetItem) => {
+  const handleItemClick = (node: any) => {
+    if (node.isUnplanned) return; 
     triggerHaptic();
-    setEditingItem(item);
+    setEditingItem(node.item);
     setShowAddForm(true);
   };
 
@@ -157,9 +227,18 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
 
   const sectionClass = `glass premium-card p-5 rounded-[32px] mb-3 relative overflow-hidden`;
 
+  // Categories to iterate over, including Uncategorized if it has spend
+  const displayCategories = useMemo(() => {
+    const base: Category[] = ['Needs', 'Wants', 'Savings'];
+    if (summary.realizedTotals.Uncategorized > 0) {
+      base.push('Uncategorized');
+    }
+    return base;
+  }, [summary.realizedTotals.Uncategorized]);
+
   return (
-    <div className="pb-32 pt-1 animate-slide-up">
-      <div className="bg-gradient-to-r from-violet-700 to-purple-800 px-5 py-4 rounded-2xl mb-4 mx-1 shadow-xl relative overflow-hidden">
+    <div className="animate-slide-up">
+      <div className="bg-gradient-to-r from-brand-primary to-brand-secondary px-5 py-4 rounded-2xl mb-4 mx-1 shadow-xl relative overflow-hidden">
         <div className="absolute inset-0 bg-white/5 pointer-events-none"></div>
         <div className="flex justify-between items-center w-full relative z-10">
           <div>
@@ -197,65 +276,76 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
               </div>
               <div className="text-right">
                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Realized</p>
-                <p className="text-lg font-black text-brand-accent">{currencySymbol}{summary.grandSpent.toLocaleString()}</p>
+                <p className="text-lg font-black text-brand-accent">{currencySymbol}{summary.grandRealized.toLocaleString()}</p>
               </div>
             </div>
             
             <div className="w-full h-4 bg-slate-100 dark:bg-slate-800 rounded-full flex overflow-hidden p-1 border border-slate-200 dark:border-slate-700">
               {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => {
-                const perc = summary.grandTotal > 0 ? (summary.totals[cat] / Math.max(summary.grandTotal, settings.monthlyIncome)) * 100 : 0;
+                const totalIncome = Math.max(summary.grandTotal, settings.monthlyIncome);
+                const perc = totalIncome > 0 ? (summary.realizedTotals[cat] / totalIncome) * 100 : 0;
                 return <div key={cat} style={{ width: `${perc}%`, backgroundColor: CATEGORY_COLORS[cat] }} className="rounded-full mx-0.5 shadow-sm" />;
               })}
+              {summary.realizedTotals.Uncategorized > 0 && (
+                 <div style={{ width: `${(summary.realizedTotals.Uncategorized / Math.max(summary.grandTotal, settings.monthlyIncome)) * 100}%`, backgroundColor: CATEGORY_COLORS.Uncategorized }} className="rounded-full mx-0.5 shadow-sm" />
+              )}
             </div>
           </section>
 
           <div className="space-y-3">
-            {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
+            {displayCategories.map(cat => (
               <div key={cat} className={`${sectionClass} border-l-8`} style={{ borderLeftColor: CATEGORY_COLORS[cat] }}>
                 <div className="flex justify-between items-center mb-5">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white">{cat}</h3>
+                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white">{cat === 'Uncategorized' ? 'Audit Required' : cat}</h3>
                   </div>
                   <div className="text-right">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                      Cap: {currencySymbol}{summary.targets[cat].toLocaleString()}
-                    </p>
+                    {cat !== 'Uncategorized' && (
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                        Cap: {currencySymbol}{summary.targets[cat].toLocaleString()}
+                      </p>
+                    )}
                   </div>
                 </div>
                 
                 <div className="space-y-4">
-                  {budgetItems.filter(i => i.category === cat).map(item => {
-                    const actual = itemUtilization[item.id] || 0;
-                    const utilPerc = item.amount > 0 ? (actual / item.amount) * 100 : 0;
-                    const isOver = actual > item.amount;
+                  {displayNodes.filter(n => n.item.category === cat).map(node => {
+                    const item = node.item;
+                    const actual = node.actual;
+                    const utilPerc = item.amount > 0 ? (actual / item.amount) * 100 : (actual > 0 ? 100 : 0);
+                    const isOver = item.amount > 0 && actual > item.amount;
+                    const isUnplanned = !!node.isUnplanned;
                     
                     return (
-                      <div key={item.id} onClick={() => handleItemClick(item)} className="space-y-2.5 group cursor-pointer active:scale-[0.98] transition-all">
+                      <div key={item.id} onClick={() => handleItemClick(node)} className={`space-y-2.5 group transition-all ${isUnplanned ? 'opacity-70' : 'cursor-pointer active:scale-[0.98]'}`}>
                         <div className="flex justify-between items-end">
                           <div className="flex flex-col">
-                            <span className="text-[12px] font-black text-slate-800 dark:text-slate-100 tracking-tight leading-none group-hover:text-brand-primary transition-colors">{item.name}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[12px] font-black text-slate-800 dark:text-slate-100 tracking-tight leading-none group-hover:text-brand-primary transition-colors">{item.name}</span>
+                              {isUnplanned && <Zap size={10} className="text-indigo-400 fill-indigo-400" title="Auto-generated from expenses" />}
+                            </div>
                             <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.15em] mt-1.5">{item.subCategory}</span>
                           </div>
                           <div className="text-right">
                             <p className="text-[11px] font-black text-slate-900 dark:text-white leading-none">
-                              <span className={isOver ? 'text-rose-500' : 'text-slate-500'}>{currencySymbol}{actual.toLocaleString()}</span>
-                              <span className="text-[10px] text-slate-300 dark:text-slate-600 ml-1 font-bold">/ {currencySymbol}{item.amount.toLocaleString()}</span>
+                              <span className={isOver || (isUnplanned && actual > 0) ? 'text-rose-500' : 'text-slate-500'}>{currencySymbol}{actual.toLocaleString()}</span>
+                              {!isUnplanned && <span className="text-[10px] text-slate-300 dark:text-slate-600 ml-1 font-bold">/ {currencySymbol}{item.amount.toLocaleString()}</span>}
                             </p>
                           </div>
                         </div>
                         <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800/60 rounded-full overflow-hidden shadow-inner">
                           <div 
-                            className={`h-full rounded-full transition-all duration-1000 ease-out shadow-sm ${isOver ? 'bg-rose-500' : ''}`}
+                            className={`h-full rounded-full transition-all duration-1000 ease-out shadow-sm ${isOver || isUnplanned ? 'bg-rose-500' : ''}`}
                             style={{ 
                               width: `${Math.min(100, utilPerc)}%`,
-                              backgroundColor: isOver ? undefined : CATEGORY_COLORS[cat]
+                              backgroundColor: (isOver || isUnplanned) ? undefined : CATEGORY_COLORS[cat]
                             }}
                           />
                         </div>
                       </div>
                     );
                   })}
-                  {budgetItems.filter(i => i.category === cat).length === 0 && (
+                  {displayNodes.filter(n => n.item.category === cat).length === 0 && (
                     <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest text-center py-2 italic">Zero nodes defined</p>
                   )}
                 </div>
@@ -266,7 +356,7 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
       ) : (
         <div className="space-y-3 animate-kick">
            {nextCriticalBill && (
-             <section className="bg-gradient-to-r from-violet-600 to-indigo-700 rounded-2xl p-5 shadow-xl relative overflow-hidden mx-1 mb-1">
+             <section className="bg-gradient-to-r from-brand-primary to-brand-secondary rounded-2xl p-5 shadow-xl relative overflow-hidden mx-1 mb-1">
                 <div className="absolute right-0 top-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16 blur-2xl"></div>
                 <div className="flex items-center justify-between relative z-10">
                    <div className="flex items-center gap-4">
@@ -320,7 +410,7 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
                        <div>
                          <h4 className="text-[13px] font-black text-slate-800 dark:text-white truncate max-w-[150px] tracking-tight">{bill.merchant}</h4>
                          <div className="flex items-center gap-2 mt-1">
-                           <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${isOverdue ? 'bg-rose-500 text-white shadow-rose-200 shadow-sm' : isToday ? 'bg-amber-500 text-white shadow-amber-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                           <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${isOverdue ? 'bg-rose-500 text-white shadow-rose-200 shadow-sm' : isToday ? 'bg-amber-500 text-white shadow-amber-200' : 'bg-slate-100 dark:bg-slate-800 text-slate-50'}`}>
                              {isOverdue ? `${Math.abs(days)}d Late` : isToday ? 'Due Now' : `${days}d`}
                            </span>
                            {bill.frequency !== 'None' && <span className="text-[8px] text-slate-400 font-black uppercase flex items-center gap-1 opacity-60"><Repeat size={10} /> {bill.frequency}</span>}
@@ -350,6 +440,80 @@ const BudgetPlanner: React.FC<BudgetPlannerProps> = ({
                );
              })}
            </div>
+        </div>
+      )}
+
+      {showAddForm && (
+        <div className="fixed inset-0 bg-black/60 z-[130] flex items-end justify-center backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-t-[32px] animate-slide-up shadow-2xl p-6 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-xs font-black uppercase dark:text-white tracking-widest">{editingItem ? 'Edit Protocol' : 'Design Protocol'}</h3>
+                <p className="text-[8px] font-black text-slate-400 uppercase mt-0.5">Budget Node Architecture</p>
+              </div>
+              <button onClick={closeForm} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400"><X size={18} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto no-scrollbar space-y-5">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Node Label</span>
+                  <button onClick={handleDetectCategory} disabled={isDetecting} className="flex items-center gap-1 text-[8px] font-black uppercase text-indigo-500">
+                    {isDetecting ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Predict
+                  </button>
+                </div>
+                <div className="relative">
+                  <input value={newItemName} onChange={(e) => setNewItemName(e.target.value)} placeholder="e.g. Weekly Groceries" className="w-full bg-slate-50 dark:bg-slate-800 p-3.5 rounded-2xl text-[11px] font-black outline-none border border-transparent focus:border-brand-primary dark:text-white" />
+                  <Store size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">Planned Target</span>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-300">{currencySymbol}</span>
+                  <input type="number" value={newItemAmount} onChange={(e) => setNewItemAmount(e.target.value)} placeholder="0" className="w-full bg-slate-50 dark:bg-slate-800 pl-8 pr-4 py-3.5 rounded-2xl text-[11px] font-black outline-none border border-transparent focus:border-brand-primary dark:text-white" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">Category Stack</span>
+                <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                  {(['Needs', 'Wants', 'Savings'] as Category[]).map(cat => (
+                    <button key={cat} onClick={() => setNewItemCategory(cat)} className={`shrink-0 px-4 py-2 rounded-xl text-[8px] font-black uppercase border transition-all ${newItemCategory === cat ? 'bg-slate-900 text-white border-slate-900' : 'bg-white dark:bg-slate-800 text-slate-400 border-slate-100 dark:border-slate-700'}`}>{cat}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 px-1">
+                  <Layers size={10} className="text-slate-400" />
+                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Architecture Node</span>
+                </div>
+                <div className="relative">
+                  <select value={newItemSubCategory} onChange={(e) => setNewItemSubCategory(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 p-3.5 rounded-2xl text-[11px] font-bold outline-none border border-transparent focus:border-brand-primary dark:text-white appearance-none pr-10">
+                    {SUB_CATEGORIES[newItemCategory]?.map(sub => <option key={sub} value={sub}>{sub}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 space-y-3">
+              <button 
+                onClick={handleInternalSubmit} 
+                disabled={!newItemName || !newItemAmount}
+                className="w-full py-4 bg-slate-900 dark:bg-indigo-600 text-white font-black rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50"
+              >
+                <Check size={14} strokeWidth={4} /> {editingItem ? 'Update Specification' : 'Deploy Protocol'}
+              </button>
+              {editingItem && (
+                <button onClick={() => { triggerHaptic(40); onDeleteBudget(editingItem.id); closeForm(); }} className="w-full py-3 text-rose-500 font-black text-[9px] uppercase tracking-widest hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-xl transition-all">
+                   Terminate Protocol
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

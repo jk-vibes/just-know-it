@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { View } from '../types';
 import { Plus } from 'lucide-react';
@@ -85,8 +84,18 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, remainingPercentage, netWo
             viewBox="0 0 24 24" 
             fill="none" 
             xmlns="http://www.w3.org/2000/svg" 
-            className="drop-shadow-xl overflow-visible rotate-[-90deg]"
+            className="drop-shadow-2xl overflow-visible rotate-[-90deg]"
           >
+            {/* Base Background Circle to block underlying numbers/grid */}
+            <circle 
+              cx="12" 
+              cy="12" 
+              r="11.5" 
+              fill="var(--brand-surface)" 
+              className="transition-colors duration-500" 
+              style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))' }}
+            />
+
             {/* Needs Circle: Light Blue Track -> Light Blue Stroke */}
             <circle cx="12" cy="12" r={rNeeds} stroke="#60a5fa" strokeWidth="2.4" strokeOpacity={trackOpacity} />
             <circle 

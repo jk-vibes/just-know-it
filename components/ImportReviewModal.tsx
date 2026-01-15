@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { X, Check, ArrowDownCircle, ArrowUpCircle, Edit3, Trash2, Save, Wallet, ShieldCheck, RefreshCw } from 'lucide-react';
 import { WealthItem, UserSettings } from '../types';
@@ -16,30 +15,28 @@ interface ImportReviewModalProps {
 const ImportReviewModal: React.FC<ImportReviewModalProps> = ({ stagedItems, wealthItems, settings, onConfirm, onCancel }) => {
   const currencySymbol = getCurrencySymbol(settings.currency);
   
-  // Define filtering logic for use both in state initialization and render
-  const getLiquidAccounts = (items: WealthItem[]) => 
-    items.filter(i => ['Checking Account', 'Savings Account', 'Cash', 'Credit Card'].includes(i.category));
+  const liquidAccounts = useMemo(() => 
+    wealthItems.filter(i => ['Checking Account', 'Savings Account', 'Cash', 'Credit Card', 'Savings'].includes(i.category)), 
+    [wealthItems]
+  );
 
-  const liquidAccounts = useMemo(() => getLiquidAccounts(wealthItems), [wealthItems]);
-
-  // Initialize state with auto-mapping heuristics
-  // We use wealthItems directly here to avoid TDZ issues with liquidAccounts
   const [items, setItems] = useState(() => {
-    const activeLiquidAccounts = getLiquidAccounts(wealthItems);
-    
     return stagedItems.map((item, idx) => {
       let targetAccountId = item.entryType === 'Account' ? 'SYSTEM' : (item.targetAccountId || '');
       
       // Auto-mapping heuristics for accounts based on source hints
       if (item.entryType !== 'Account' && !targetAccountId) {
         const hint = (item.accountName || item.merchant || '').toLowerCase();
-        const match = activeLiquidAccounts.find(w => 
-          w.name.toLowerCase().includes(hint) || hint.includes(w.name.toLowerCase())
+        const match = wealthItems.find(w => 
+          w.name.toLowerCase().includes(hint) || 
+          hint.includes(w.name.toLowerCase()) ||
+          w.alias?.toLowerCase().includes(hint) ||
+          hint.includes(w.alias?.toLowerCase() || '')
         );
         if (match) {
           targetAccountId = match.id;
-        } else if (activeLiquidAccounts.length === 1) {
-          targetAccountId = activeLiquidAccounts[0].id;
+        } else if (liquidAccounts.length === 1) {
+          targetAccountId = liquidAccounts[0].id;
         }
       }
 
@@ -66,7 +63,7 @@ const ImportReviewModal: React.FC<ImportReviewModalProps> = ({ stagedItems, weal
       <div className="bg-white dark:bg-slate-950 w-full max-w-2xl rounded-[32px] shadow-2xl flex flex-col max-h-[90vh] animate-slide-up overflow-hidden border border-white/10">
         <div className="flex justify-between items-center px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
           <div>
-            <h3 className="text-xs font-black uppercase tracking-widest dark:text-white">Audit Ingestion</h3>
+            <h3 className="text-xs font-black uppercase tracking-widest dark:text-white">Review Import</h3>
             <p className="text-[8px] font-black text-slate-400 uppercase mt-0.5">Validating {items.filter(i => i.action !== 'skip').length} signals</p>
           </div>
           <div className="flex items-center gap-2">
@@ -82,8 +79,11 @@ const ImportReviewModal: React.FC<ImportReviewModalProps> = ({ stagedItems, weal
           {items.map((item) => {
             if (item.action === 'skip') return null;
 
+            const isAccount = item.entryType === 'Account';
+            const valToDisplay = item.amount !== undefined ? item.amount : item.value;
+
             return (
-              <div key={item.tempId} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm group animate-kick">
+              <div key={item.tempId} className={`bg-white dark:bg-slate-900 border rounded-2xl p-4 shadow-sm group animate-kick transition-colors ${isAccount ? 'border-blue-100 dark:border-blue-900/30' : 'border-slate-100 dark:border-slate-800'}`}>
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex items-center gap-3">
                     <div className={`p-2 rounded-xl bg-opacity-10 shrink-0 ${
@@ -100,13 +100,13 @@ const ImportReviewModal: React.FC<ImportReviewModalProps> = ({ stagedItems, weal
                         <input 
                           type="text" 
                           value={item.merchant || item.source || item.name || 'General'} 
-                          onChange={(e) => handleUpdateItem(item.tempId, { merchant: e.target.value, name: e.target.value })}
-                          className="text-[11px] font-black text-slate-900 dark:text-white bg-transparent border-none outline-none focus:ring-0 w-32 p-0 leading-none"
+                          onChange={(e) => handleUpdateItem(item.tempId, { merchant: e.target.value, name: e.target.value, alias: e.target.value })}
+                          className={`text-[11px] font-black bg-transparent border-none outline-none focus:ring-0 w-32 p-0 leading-none ${isAccount ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'}`}
                         />
                         <Edit3 size={8} className="text-slate-300 opacity-0 group-hover:opacity-100" />
                       </div>
                       <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest mt-1">
-                        {item.date} • {item.entryType} {item.wealthCategory ? `(${item.wealthCategory})` : ''}
+                        {item.date} • {isAccount ? `Account Provisioning (${item.wealthCategory})` : item.entryType}
                       </p>
                     </div>
                   </div>
@@ -115,15 +115,21 @@ const ImportReviewModal: React.FC<ImportReviewModalProps> = ({ stagedItems, weal
                       <span className="text-[10px] font-black text-slate-300">{currencySymbol}</span>
                       <input 
                         type="number" 
-                        value={item.amount || item.value} 
-                        onChange={(e) => handleUpdateItem(item.tempId, { amount: Math.round(parseFloat(e.target.value)), value: Math.round(parseFloat(e.target.value)) })}
-                        className="text-[14px] font-black text-slate-900 dark:text-white bg-transparent border-none outline-none focus:ring-0 text-right w-20 p-0 leading-none"
+                        value={valToDisplay === 0 ? '' : valToDisplay} 
+                        onChange={(e) => {
+                          const val = Math.round(parseFloat(e.target.value) || 0);
+                          if (isAccount) handleUpdateItem(item.tempId, { value: val });
+                          else handleUpdateItem(item.tempId, { amount: val });
+                        }}
+                        className={`text-[14px] font-black bg-transparent border-none outline-none focus:ring-0 text-right w-20 p-0 leading-none ${isAccount ? 'text-blue-600 dark:text-blue-400' : 'text-slate-900 dark:text-white'}`}
+                        placeholder="0"
                       />
                     </div>
+                    {isAccount && <p className="text-[6px] font-black text-blue-400 uppercase tracking-widest mt-1">Current Balance</p>}
                   </div>
                 </div>
 
-                {item.entryType !== 'Account' && (
+                {!isAccount && (
                   <div className="mt-3 pt-3 border-t border-slate-50 dark:border-slate-800 space-y-2">
                     <div className="flex items-center justify-between">
                        <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Wallet size={8} /> Account Binding</span>
@@ -140,7 +146,7 @@ const ImportReviewModal: React.FC<ImportReviewModalProps> = ({ stagedItems, weal
                     >
                       <option value="">Select binding account...</option>
                       {liquidAccounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>{acc.name} ({currencySymbol}{Math.round(acc.value).toLocaleString()})</option>
+                        <option key={acc.id} value={acc.id}>{acc.alias || acc.name} ({currencySymbol}{Math.round(acc.value).toLocaleString()})</option>
                       ))}
                     </select>
                   </div>
@@ -160,7 +166,7 @@ const ImportReviewModal: React.FC<ImportReviewModalProps> = ({ stagedItems, weal
               triggerHaptic(20);
               const readyItems = items.filter(i => i.action !== 'skip');
               if (readyItems.some(i => i.entryType !== 'Account' && !i.targetAccountId)) {
-                alert("Binding failed. Please map all records to an account.");
+                alert("Binding failed. Please map all transactions to an account.");
                 return;
               }
               onConfirm(readyItems);

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   Category, Expense, UserSettings, Frequency, 
@@ -71,7 +70,7 @@ const AddRecord: React.FC<AddRecordProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currencySymbol = getCurrencySymbol(settings.currency);
-  const liquidAccounts = wealthItems.filter(i => ['Checking Account', 'Savings Account', 'Cash', 'Credit Card'].includes(i.category));
+  const liquidAccounts = wealthItems.filter(i => ['Checking Account', 'Savings Account', 'Cash', 'Credit Card', 'Savings'].includes(i.category));
 
   const isModeLocked = !!(initialData?.mode || isEditing);
 
@@ -104,7 +103,11 @@ const AddRecord: React.FC<AddRecordProps> = ({
         setPaymentMethod(initialData.paymentMethod || 'UPI');
         setSourceWealthId(initialData.sourceAccountId || (liquidAccounts[0]?.id || ''));
       }
-      setAmount(Math.round(initialData.amount || 0).toString() || '');
+      
+      // Fix: Only set amount string if value is non-zero to allow clean numeric entry
+      const initialAmt = Math.round(initialData.amount || 0);
+      setAmount(initialAmt !== 0 ? initialAmt.toString() : '');
+      
       setNote(initialData.note || '');
       setDate(initialData.date || initialData.dueDate ? (initialData.date || initialData.dueDate).split('T')[0] : new Date().toISOString().split('T')[0]);
     } else {
@@ -188,7 +191,7 @@ const AddRecord: React.FC<AddRecordProps> = ({
   const handleInternalSubmit = () => {
     if (!amount) return;
     triggerHaptic(20);
-    const roundedAmount = Math.round(parseFloat(amount));
+    const roundedAmount = Math.round(parseFloat(amount) || 0);
 
     if (mode === 'Expense') {
       const payload = { 

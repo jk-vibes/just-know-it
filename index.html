@@ -21,7 +21,10 @@
               secondary: 'var(--brand-secondary)',
               accent: 'var(--brand-accent)',
               bg: 'var(--brand-bg)',
+              surface: 'var(--brand-surface)',
+              border: 'var(--brand-border)',
               glow: 'var(--brand-glow)',
+              text: 'var(--brand-text)',
             }
           },
           fontFamily: {
@@ -53,75 +56,65 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     :root {
+      /* Default stable backgrounds */
+      --brand-bg: #f8fafc;
+      --brand-surface: #ffffff;
+      --brand-border: #f1f5f9;
+      --brand-text: #0f172a;
+      
+      /* Base accent colors (Light Mode Default) */
       --brand-primary: #3b82f6;
       --brand-secondary: #1e3a8a;
       --brand-accent: #f43f5e;
-      --brand-bg: #f8fafc;
       --brand-glow: rgba(59, 130, 246, 0.3);
-      --bg-light: #ffffff;
-      --bg-dark: #020617;
     }
+    
+    /* Global Dark Mode stability */
+    .dark {
+      --brand-bg: #020617;
+      --brand-surface: #0f172a;
+      --brand-border: #1e293b;
+      --brand-text: #f8fafc;
+    }
+
+    /* THEME-SPECIFIC ACCENTS ONLY */
     
     [data-theme='Spiderman'] {
       --brand-primary: #e11d48;
-      --brand-secondary: #9f1239;
-      --brand-accent: #2563eb;
-      --brand-bg: #fff1f2;
+      --brand-secondary: #1e40af;
+      --brand-accent: #fecdd3;
       --brand-glow: rgba(225, 29, 72, 0.4);
     }
 
     [data-theme='CaptainAmerica'] {
-      --brand-primary: #0369a1;
-      --brand-secondary: #0c4a6e;
-      --brand-accent: #dc2626;
-      --brand-bg: #f0f9ff;
-      --brand-glow: rgba(3, 105, 161, 0.4);
+      --brand-primary: #0284c7;
+      --brand-secondary: #dc2626;
+      --brand-accent: #cbd5e1;
+      --brand-glow: rgba(2, 132, 199, 0.4);
     }
 
     [data-theme='Naruto'] {
       --brand-primary: #f97316;
-      --brand-secondary: #0f172a;
+      --brand-secondary: #dc2626;
       --brand-accent: #facc15;
-      --brand-bg: #fffcf0;
       --brand-glow: rgba(249, 115, 22, 0.4);
     }
 
     [data-theme='Batman'] {
       --brand-primary: #facc15;
-      --brand-secondary: #000000;
-      --brand-accent: #64748b;
-      --brand-bg: #0f172a;
+      --brand-secondary: #1e293b;
+      --brand-accent: #475569;
       --brand-glow: rgba(250, 204, 21, 0.3);
-    }
-
-    [data-theme='McQueen'] {
-      --brand-primary: #ef4444;
-      --brand-secondary: #f97316;
-      --brand-accent: #facc15;
-      --brand-bg: #fff5f5;
-      --brand-glow: rgba(239, 68, 68, 0.4);
-    }
-
-    [data-theme='Frozen'] {
-      --brand-primary: #0ea5e9;
-      --brand-secondary: #8b5cf6;
-      --brand-accent: #ffffff;
-      --brand-bg: #f0f9ff;
-      --brand-glow: rgba(14, 165, 233, 0.4);
     }
 
     body {
       font-family: 'Plus Jakarta Sans', sans-serif;
       margin: 0;
       padding: 0;
-      background-color: var(--bg-light);
-      transition: background-color 0.3s ease;
+      background-color: var(--brand-bg);
+      transition: background-color 0.4s ease;
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior-y: none;
-    }
-
-    html.dark body {
-      background-color: var(--bg-dark);
     }
 
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -139,22 +132,16 @@
 
     .glass {
       backdrop-filter: blur(12px);
-      background: rgba(255, 255, 255, 0.6);
-      border: 1px solid rgba(255, 255, 255, 0.4);
-    }
-
-    .dark .glass {
-      background: rgba(15, 23, 42, 0.5);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: var(--brand-surface);
+      opacity: 0.98;
+      border: 1px solid var(--brand-border);
     }
 
     .premium-card {
       box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.05);
       transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    
-    .dark .premium-card {
-      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+      background: var(--brand-surface);
+      border: 1px solid var(--brand-border);
     }
 
     .neon-glow {
@@ -166,12 +153,8 @@
       inset: 0;
       z-index: -1;
       overflow: hidden;
-      background: var(--bg-light);
+      background: var(--brand-bg);
       transition: background 0.5s ease;
-    }
-    
-    .dark .mesh-bg {
-      background: var(--bg-dark);
     }
 
     .mesh-blob {
@@ -184,12 +167,12 @@
                   radial-gradient(circle at 10% 20%, var(--brand-accent) 0%, transparent 40%),
                   radial-gradient(circle at 80% 80%, var(--brand-secondary) 0%, transparent 40%);
       filter: blur(100px);
-      opacity: 0.12;
+      opacity: 0.08;
       animation: meshMove 30s infinite alternate ease-in-out;
     }
     
     .dark .mesh-blob {
-      opacity: 0.08;
+      opacity: 0.05;
     }
   </style>
 <script type="importmap">
@@ -205,7 +188,7 @@
 }
 </script>
 </head>
-<body class="bg-brand-bg dark:bg-slate-950 text-slate-900 dark:text-white h-full w-full fixed inset-0 overflow-hidden transition-colors duration-500">
+<body class="bg-brand-bg text-brand-text h-full w-full fixed inset-0 overflow-hidden transition-colors duration-500">
   <div id="root" class="h-full w-full"></div>
 </body>
 </html>
